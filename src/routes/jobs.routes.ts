@@ -1,0 +1,33 @@
+import { Router } from 'express';
+import {
+  listJobs, createJob, getJob, applyToJob, myApplications,
+  vendorJobs, getProfile, createProfile, updateProfile,
+  candidateMatches, vendorCandidates, poke,
+} from '../controllers/jobs.controller';
+import { requireAuth, requireVendor, requireCandidate } from '../middleware/auth.middleware';
+
+const router = Router();
+
+// Public
+router.get('/', listJobs);
+
+// Candidate routes — ALL named paths BEFORE /:id
+router.get('/my-applications', requireCandidate, myApplications);
+router.get('/jobmatches', requireCandidate, candidateMatches);       // ranked jobs for candidate
+router.get('/profile', requireAuth, getProfile);
+router.post('/profile', requireCandidate, createProfile);
+router.put('/profile', requireCandidate, updateProfile);
+
+// Vendor routes — ALL named paths BEFORE /:id
+router.get('/vendor', requireVendor, vendorJobs);
+router.get('/profilematches', requireVendor, vendorCandidates);      // ranked candidates for vendor
+router.post('/create', requireVendor, createJob);
+
+// Shared
+router.post('/poke', requireAuth, poke);
+
+// Parameterized routes LAST
+router.get('/:id', getJob);
+router.post('/:id/apply', requireCandidate, applyToJob);
+
+export default router;
