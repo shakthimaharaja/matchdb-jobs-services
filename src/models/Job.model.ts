@@ -10,6 +10,7 @@ export interface IJob extends Document {
   recruiterPhone: string;
   location: string;
   jobType: 'full_time' | 'part_time' | 'contract' | 'remote' | 'internship';
+  jobSubType: string;
   salaryMin: number | null;
   salaryMax: number | null;
   payPerHour: number | null;
@@ -34,6 +35,7 @@ const JobSchema = new Schema<IJob>(
       enum: ['full_time', 'part_time', 'contract', 'remote', 'internship'],
       default: 'full_time',
     },
+    jobSubType: { type: String, default: '' },
     salaryMin: { type: Number, default: null },
     salaryMax: { type: Number, default: null },
     payPerHour: { type: Number, default: null },

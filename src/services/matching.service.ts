@@ -1,8 +1,11 @@
-import { IJob } from '../models/Job.model';
-import { ICandidateProfile } from '../models/CandidateProfile.model';
+import { IJob } from "../models/Job.model";
+import { ICandidateProfile } from "../models/CandidateProfile.model";
 
 // Skills match: Jaccard-style overlap (case-insensitive)
-function calcSkillsScore(candidateSkills: string[], jobSkills: string[]): number {
+function calcSkillsScore(
+  candidateSkills: string[],
+  jobSkills: string[],
+): number {
   if (!jobSkills.length) return 100;
   if (!candidateSkills.length) return 0;
 
@@ -10,7 +13,9 @@ function calcSkillsScore(candidateSkills: string[], jobSkills: string[]): number
   const jSet = new Set(jobSkills.map((s) => s.toLowerCase().trim()));
 
   let matches = 0;
-  jSet.forEach((s) => { if (cSet.has(s)) matches++; });
+  jSet.forEach((s) => {
+    if (cSet.has(s)) matches++;
+  });
 
   return Math.round((matches / jSet.size) * 100);
 }
@@ -38,12 +43,18 @@ export interface MatchedCandidate extends ICandidateProfile {
   matchBreakdown: { skills: number; type: number; experience: number };
 }
 
-export function matchCandidateToJobs(candidate: ICandidateProfile, jobs: IJob[]): MatchedJob[] {
+export function matchCandidateToJobs(
+  candidate: ICandidateProfile,
+  jobs: IJob[],
+): MatchedJob[] {
   return jobs
     .map((job) => {
       const skills = calcSkillsScore(candidate.skills, job.skillsRequired);
       const type = calcTypeScore(candidate.preferredJobType, job.jobType);
-      const exp = calcExpScore(candidate.experienceYears, job.experienceRequired);
+      const exp = calcExpScore(
+        candidate.experienceYears,
+        job.experienceRequired,
+      );
       const pct = Math.round(skills * 0.6 + type * 0.15 + exp * 0.25);
 
       return {
@@ -56,19 +67,25 @@ export function matchCandidateToJobs(candidate: ICandidateProfile, jobs: IJob[])
     .sort((a, b) => b.matchPercentage - a.matchPercentage);
 }
 
-export function matchJobsToCandidates(jobs: IJob[], candidates: ICandidateProfile[]): MatchedCandidate[] {
+export function matchJobsToCandidates(
+  jobs: IJob[],
+  candidates: ICandidateProfile[],
+): MatchedCandidate[] {
   const results: MatchedCandidate[] = [];
 
   for (const candidate of candidates) {
     let bestPct = 0;
-    let bestJobId = '';
-    let bestJobTitle = '';
+    let bestJobId = "";
+    let bestJobTitle = "";
     let bestBreakdown = { skills: 0, type: 0, experience: 0 };
 
     for (const job of jobs) {
       const skills = calcSkillsScore(candidate.skills, job.skillsRequired);
       const type = calcTypeScore(candidate.preferredJobType, job.jobType);
-      const exp = calcExpScore(candidate.experienceYears, job.experienceRequired);
+      const exp = calcExpScore(
+        candidate.experienceYears,
+        job.experienceRequired,
+      );
       const pct = Math.round(skills * 0.6 + type * 0.15 + exp * 0.25);
 
       if (pct > bestPct) {

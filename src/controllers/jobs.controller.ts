@@ -71,6 +71,22 @@ export async function listJobs(
   }
 }
 
+// GET /api/jobs/profiles-public — public candidate profile listing (limited fields)
+export async function listPublicProfiles(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const profiles = await CandidateProfile.find()
+      .select('name currentRole currentCompany preferredJobType experienceYears skills location')
+      .sort({ createdAt: -1 });
+    res.json(profiles.map(profileToJSON));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // POST /api/jobs/create — vendor creates job
 export async function createJob(
   req: Request,
@@ -87,6 +103,7 @@ export async function createJob(
       jobType: z
         .enum(["full_time", "part_time", "contract", "remote", "internship"])
         .optional(),
+      jobSubType: z.string().optional(),
       salaryMin: z.number().optional(),
       salaryMax: z.number().optional(),
       payPerHour: z.number().optional(),

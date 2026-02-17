@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  listJobs, createJob, getJob, applyToJob, myApplications,
+  listJobs, listPublicProfiles, createJob, getJob, applyToJob, myApplications,
   vendorJobs, getProfile, createProfile, updateProfile,
   candidateMatches, vendorCandidates, poke,
 } from '../controllers/jobs.controller';
@@ -10,6 +10,7 @@ const router = Router();
 
 // Public
 router.get('/', listJobs);
+router.get('/profiles-public', listPublicProfiles);
 
 // Candidate routes — ALL named paths BEFORE /:id
 router.get('/my-applications', requireCandidate, myApplications);
