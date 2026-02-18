@@ -8,6 +8,7 @@ import {
   matchJobsToCandidates,
 } from "../services/matching.service";
 import { sendPokeEmail } from "../services/sendgrid.service";
+import { extractSkills } from "../services/skill-extractor.service";
 import { AppError } from "../middleware/error.middleware";
 
 // Converts camelCase keys to snake_case for frontend consumption
@@ -79,7 +80,9 @@ export async function listPublicProfiles(
 ): Promise<void> {
   try {
     const profiles = await CandidateProfile.find()
-      .select('name currentRole currentCompany preferredJobType experienceYears skills location')
+      .select(
+        "name currentRole currentCompany preferredJobType experienceYears skills location",
+      )
       .sort({ createdAt: -1 });
     res.json(profiles.map(profileToJSON));
   } catch (err) {
@@ -101,9 +104,10 @@ export async function createJob(
       description: z.string().min(10),
       location: z.string().optional(),
       jobType: z
-        .enum(["full_time", "part_time", "contract", "remote", "internship"])
+        .enum(["full_time", "part_time", "contract", "internship"])
         .optional(),
       jobSubType: z.string().optional(),
+      workMode: z.enum(["remote", "onsite", "hybrid", ""]).optional(),
       salaryMin: z.number().optional(),
       salaryMax: z.number().optional(),
       payPerHour: z.number().optional(),
@@ -114,8 +118,17 @@ export async function createJob(
     });
 
     const body = schema.parse(incoming);
+
+    // Extract skills from title + description and merge with any manually listed skills
+    const textToExtract = `${body.title} ${body.description}`;
+    const extractedSkills = extractSkills(textToExtract);
+    const mergedSkills = Array.from(
+      new Set([...extractedSkills, ...(body.skillsRequired || [])]),
+    );
+
     const job = await Job.create({
       ...body,
+      skillsRequired: mergedSkills,
       vendorId: req.user!.userId,
       vendorEmail: req.user!.email,
     });
@@ -183,6 +196,60 @@ export async function applyToJob(
     });
 
     res.status(201).json(profileToJSON(app));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/jobs/:id/close — vendor closes (deactivates) their own job
+export async function closeJob(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    if (job.vendorId?.toString() !== req.user!.userId) {
+      res.status(403).json({ error: "Not authorized to close this job" });
+      return;
+    }
+    job.isActive = false;
+    await job.save();
+    const count = await Application.countDocuments({ jobId: job._id });
+    const result = jobToJSON(job);
+    result.application_count = count;
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/jobs/:id/reopen — vendor re-activates their own closed job
+export async function reopenJob(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    if (job.vendorId?.toString() !== req.user!.userId) {
+      res.status(403).json({ error: "Not authorized to reopen this job" });
+      return;
+    }
+    job.isActive = true;
+    await job.save();
+    const count = await Application.countDocuments({ jobId: job._id });
+    const result = jobToJSON(job);
+    result.application_count = count;
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -257,7 +324,13 @@ export async function createProfile(
       return;
     }
 
+    // Preserve raw visibility_config before camelCase conversion
+    const rawVisibilityConfig = (req.body as any).visibility_config;
     const incoming = toCamelCase(req.body);
+    if (rawVisibilityConfig !== undefined) {
+      incoming.visibilityConfig = rawVisibilityConfig;
+    }
+
     const profile = await CandidateProfile.create({
       ...incoming,
       candidateId: req.user!.userId,
@@ -269,20 +342,161 @@ export async function createProfile(
   }
 }
 
-// PUT /api/jobs/profile — update profile
+// PUT /api/jobs/profile — create (first time) or update (append-only when locked)
 export async function updateProfile(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
+    // Preserve raw visibility_config before camelCase conversion (inner keys are job type values like "full_time")
+    const rawVisibilityConfig = (req.body as any).visibility_config;
     const incoming = toCamelCase(req.body);
+    if (rawVisibilityConfig !== undefined) {
+      incoming.visibilityConfig = rawVisibilityConfig;
+    }
+
+    const existing = await CandidateProfile.findOne({
+      candidateId: req.user!.userId,
+    });
+
+    let updateData: any;
+
+    if (existing && existing.profileLocked) {
+      // ── Append-only resume fields: incoming must start with existing text ──
+      const appendFields = [
+        "resumeSummary",
+        "resumeExperience",
+        "resumeEducation",
+        "resumeAchievements",
+      ] as const;
+      for (const field of appendFields) {
+        const existingVal = (existing as any)[field] || "";
+        const incomingVal = incoming[field] || "";
+        if (
+          incomingVal &&
+          existingVal &&
+          !incomingVal.startsWith(existingVal)
+        ) {
+          res
+            .status(400)
+            .json({
+              error: `Cannot modify existing content in ${field}. You may only append new content.`,
+            });
+          return;
+        }
+      }
+
+      // ── Experience years: can only increase ──
+      if (
+        incoming.experienceYears != null &&
+        incoming.experienceYears < existing.experienceYears
+      ) {
+        res
+          .status(400)
+          .json({
+            error: "Experience years can only be increased, not decreased.",
+          });
+        return;
+      }
+
+      // ── Visibility config: union-merge (append-only — types/sub-types can be added, never removed) ──
+      const existingVis: Record<string, string[]> =
+        (existing.visibilityConfig as any) || {};
+      const incomingVis: Record<string, string[]> =
+        incoming.visibilityConfig || {};
+      const mergedVis: Record<string, string[]> = {};
+      for (const [type, subs] of Object.entries(existingVis)) {
+        mergedVis[type] = Array.isArray(subs) ? [...subs] : [];
+      }
+      for (const [type, subs] of Object.entries(incomingVis)) {
+        if (!mergedVis[type]) {
+          mergedVis[type] = Array.isArray(subs) ? [...subs] : [];
+        } else {
+          mergedVis[type] = Array.from(
+            new Set([...mergedVis[type], ...(Array.isArray(subs) ? subs : [])]),
+          );
+        }
+      }
+
+      // ── Re-extract skills from full resume text & union with existing ──
+      const fullResumeText = [
+        incoming.resumeSummary || existing.resumeSummary || "",
+        incoming.resumeExperience || existing.resumeExperience || "",
+        incoming.resumeEducation || existing.resumeEducation || "",
+        incoming.resumeAchievements || existing.resumeAchievements || "",
+        incoming.bio || existing.bio || "",
+        existing.currentRole || "",
+      ].join(" ");
+      const newSkills = extractSkills(fullResumeText);
+      const mergedSkills = Array.from(
+        new Set([...existing.skills, ...newSkills]),
+      );
+
+      updateData = {
+        phone: incoming.phone ?? existing.phone,
+        location: incoming.location ?? existing.location,
+        preferredJobType:
+          incoming.preferredJobType ?? existing.preferredJobType,
+        expectedHourlyRate:
+          incoming.expectedHourlyRate !== undefined
+            ? incoming.expectedHourlyRate
+            : existing.expectedHourlyRate,
+        bio: incoming.bio ?? existing.bio,
+        experienceYears: incoming.experienceYears ?? existing.experienceYears,
+        resumeSummary: incoming.resumeSummary || existing.resumeSummary,
+        resumeExperience:
+          incoming.resumeExperience || existing.resumeExperience,
+        resumeEducation: incoming.resumeEducation || existing.resumeEducation,
+        resumeAchievements:
+          incoming.resumeAchievements || existing.resumeAchievements,
+        visibilityConfig: mergedVis,
+        skills: mergedSkills,
+      };
+    } else {
+      // First-time creation — extract skills from resume text and lock the profile
+      const resumeText = [
+        incoming.resumeSummary || "",
+        incoming.resumeExperience || "",
+        incoming.resumeEducation || "",
+        incoming.resumeAchievements || "",
+        incoming.bio || "",
+        incoming.currentRole || "",
+      ].join(" ");
+      const extractedSkills = extractSkills(resumeText);
+      updateData = {
+        ...incoming,
+        skills: extractedSkills,
+        profileLocked: true,
+      };
+    }
+
     const profile = await CandidateProfile.findOneAndUpdate(
       { candidateId: req.user!.userId },
-      { ...incoming, candidateId: req.user!.userId },
+      { ...updateData, candidateId: req.user!.userId },
       { new: true, upsert: true, runValidators: true },
     );
     res.json(profileToJSON(profile));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /api/jobs/profile — permanently delete candidate profile
+export async function deleteProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await CandidateProfile.findOneAndDelete({
+      candidateId: req.user!.userId,
+    });
+    if (!result) {
+      res.status(404).json({ error: "Profile not found" });
+      return;
+    }
+    res.json({ message: "Profile deleted successfully." });
   } catch (err) {
     next(err);
   }

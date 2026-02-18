@@ -43,11 +43,30 @@ export interface MatchedCandidate extends ICandidateProfile {
   matchBreakdown: { skills: number; type: number; experience: number };
 }
 
+// Visibility filter: does the candidate's visibilityConfig include this job's type/subType?
+function isVisibleForJob(candidate: ICandidateProfile, job: IJob): boolean {
+  const vis: Record<string, string[]> =
+    (candidate as any).visibilityConfig || {};
+  if (!Object.keys(vis).length) return true; // no config = visible everywhere (backward compat)
+  const jobType = (job as any).jobType || "";
+  if (!jobType) return true;
+  if (!(jobType in vis)) return false; // candidate not visible for this job type
+  const jobSubType = (job as any).jobSubType || "";
+  if (
+    jobSubType &&
+    vis[jobType].length > 0 &&
+    !vis[jobType].includes(jobSubType)
+  )
+    return false;
+  return true;
+}
+
 export function matchCandidateToJobs(
   candidate: ICandidateProfile,
   jobs: IJob[],
 ): MatchedJob[] {
   return jobs
+    .filter((job) => isVisibleForJob(candidate, job))
     .map((job) => {
       const skills = calcSkillsScore(candidate.skills, job.skillsRequired);
       const type = calcTypeScore(candidate.preferredJobType, job.jobType);
@@ -80,6 +99,9 @@ export function matchJobsToCandidates(
     let bestBreakdown = { skills: 0, type: 0, experience: 0 };
 
     for (const job of jobs) {
+      // Skip jobs the candidate is not visible for
+      if (!isVisibleForJob(candidate, job)) continue;
+
       const skills = calcSkillsScore(candidate.skills, job.skillsRequired);
       const type = calcTypeScore(candidate.preferredJobType, job.jobType);
       const exp = calcExpScore(

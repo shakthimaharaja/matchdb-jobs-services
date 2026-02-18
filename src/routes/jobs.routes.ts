@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import {
   listJobs, listPublicProfiles, createJob, getJob, applyToJob, myApplications,
-  vendorJobs, getProfile, createProfile, updateProfile,
-  candidateMatches, vendorCandidates, poke,
+  vendorJobs, getProfile, createProfile, updateProfile, deleteProfile,
+  candidateMatches, vendorCandidates, poke, closeJob, reopenJob,
 } from '../controllers/jobs.controller';
 import { requireAuth, requireVendor, requireCandidate } from '../middleware/auth.middleware';
 
@@ -18,6 +18,7 @@ router.get('/jobmatches', requireCandidate, candidateMatches);       // ranked j
 router.get('/profile', requireAuth, getProfile);
 router.post('/profile', requireCandidate, createProfile);
 router.put('/profile', requireCandidate, updateProfile);
+router.delete('/profile', requireCandidate, deleteProfile);
 
 // Vendor routes — ALL named paths BEFORE /:id
 router.get('/vendor', requireVendor, vendorJobs);
@@ -30,5 +31,7 @@ router.post('/poke', requireAuth, poke);
 // Parameterized routes LAST
 router.get('/:id', getJob);
 router.post('/:id/apply', requireCandidate, applyToJob);
+router.patch('/:id/close', requireVendor, closeJob);
+router.patch('/:id/reopen', requireVendor, reopenJob);
 
 export default router;
