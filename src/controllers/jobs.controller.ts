@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Job } from "../models/Job.model";
 import { Application } from "../models/Application.model";
 import { CandidateProfile } from "../models/CandidateProfile.model";
+import { PokeLog } from "../models/PokeLog.model";
 import {
   matchCandidateToJobs,
   matchJobsToCandidates,
@@ -10,6 +11,24 @@ import {
 import { sendPokeEmail } from "../services/sendgrid.service";
 import { extractSkills } from "../services/skill-extractor.service";
 import { AppError } from "../middleware/error.middleware";
+
+// ─── Plan Limit Tables ────────────────────────────────────────────────────────
+
+const JOB_POSTING_LIMITS: Record<string, number> = {
+  free:       0,
+  basic:      5,
+  pro:        10,
+  pro_plus:   20,
+  enterprise: Infinity,
+};
+
+const POKE_LIMITS: Record<string, number> = {
+  free:       5,
+  basic:      25,
+  pro:        50,
+  pro_plus:   Infinity,
+  enterprise: Infinity,
+};
 
 // Converts camelCase keys to snake_case for frontend consumption
 function camelToSnake(str: string): string {
@@ -118,6 +137,25 @@ export async function createJob(
     });
 
     const body = schema.parse(incoming);
+
+    // ── Job posting limit enforcement ──────────────────────────────────────
+    const plan = req.user!.plan || 'free';
+    const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
+    if (isFinite(jobLimit)) {
+      const activeCount = await Job.countDocuments({
+        vendorId: req.user!.userId,
+        isActive: true,
+      });
+      if (activeCount >= jobLimit) {
+        const err: AppError = new Error(
+          jobLimit === 0
+            ? 'Job posting requires a paid vendor subscription. Please upgrade at /pricing.'
+            : `Your ${plan} plan allows up to ${jobLimit} active job postings. Close an existing posting or upgrade your plan.`,
+        );
+        err.statusCode = 403;
+        return next(err);
+      }
+    }
 
     // Extract skills from title + description and merge with any manually listed skills
     const textToExtract = `${body.title} ${body.description}`;
@@ -244,6 +282,26 @@ export async function reopenJob(
       res.status(403).json({ error: "Not authorized to reopen this job" });
       return;
     }
+
+    // ── Reopen limit enforcement (same cap as createJob) ───────────────────
+    const plan = req.user!.plan || 'free';
+    const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
+    if (isFinite(jobLimit)) {
+      const activeCount = await Job.countDocuments({
+        vendorId: req.user!.userId,
+        isActive: true,
+      });
+      if (activeCount >= jobLimit) {
+        const err: AppError = new Error(
+          jobLimit === 0
+            ? 'Job posting requires a paid vendor subscription. Please upgrade at /pricing.'
+            : `Your ${plan} plan allows up to ${jobLimit} active job postings. Close another posting first or upgrade your plan.`,
+        );
+        err.statusCode = 403;
+        return next(err);
+      }
+    }
+
     job.isActive = true;
     await job.save();
     const count = await Application.countDocuments({ jobId: job._id });
@@ -334,6 +392,7 @@ export async function createProfile(
     const profile = await CandidateProfile.create({
       ...incoming,
       candidateId: req.user!.userId,
+      username: req.user!.username || "",
       email: req.user!.email,
     });
     res.status(201).json(profileToJSON(profile));
@@ -579,6 +638,30 @@ export async function poke(
     });
     const { to_email, to_name, subject_context } = schema.parse(req.body);
 
+    // ── Monthly poke limit enforcement ────────────────────────────────────
+    const plan = req.user!.plan || 'free';
+    const pokeLimit = POKE_LIMITS[plan] ?? 5;
+    if (isFinite(pokeLimit)) {
+      const yearMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+      // Atomically increment first, then check — decrement if over limit
+      const log = await PokeLog.findOneAndUpdate(
+        { userId: req.user!.userId, yearMonth },
+        { $inc: { count: 1 } },
+        { upsert: true, new: true },
+      );
+      if (log.count > pokeLimit) {
+        // Roll back the increment
+        await PokeLog.updateOne(
+          { userId: req.user!.userId, yearMonth },
+          { $inc: { count: -1 } },
+        );
+        res.status(429).json({
+          error: `Monthly poke limit reached (${pokeLimit}/month on your ${plan} plan). Upgrade at /pricing to send more.`,
+        });
+        return;
+      }
+    }
+
     await sendPokeEmail({
       to: to_email,
       toName: to_name,
@@ -593,6 +676,100 @@ export async function poke(
       res.status(400).json({ error: err.errors[0]?.message });
       return;
     }
+    next(err);
+  }
+}
+
+// GET /api/jobs/resume/:username — public profile view by username
+export async function getProfileByUsername(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { username } = req.params;
+    const profile = await CandidateProfile.findOne({ username });
+    if (!profile) {
+      res.status(404).json({ error: "Profile not found" });
+      return;
+    }
+    // Return full profile (public view — resume sections included)
+    res.json(profileToJSON(profile));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/jobs/resume/:username/download — download resume as plain-text file (auth required)
+export async function downloadResume(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { username } = req.params;
+    const profile = await CandidateProfile.findOne({ username });
+    if (!profile) {
+      res.status(404).json({ error: "Profile not found" });
+      return;
+    }
+
+    const now = new Date().toISOString().slice(0, 10);
+    const skills = profile.skills?.join(", ") || "—";
+    const rate = profile.expectedHourlyRate ? `$${profile.expectedHourlyRate}/hr` : "—";
+
+    const lines = [
+      "================================================================",
+      "  MATCHDB CANDIDATE RESUME",
+      "================================================================",
+      `Profile URL : http://localhost:3000/resume/${profile.username}`,
+      `Downloaded  : ${now}`,
+      "",
+      "PERSONAL INFORMATION",
+      "--------------------",
+      `Name        : ${profile.name || "—"}`,
+      `Email       : ${profile.email || "—"}`,
+      `Phone       : ${profile.phone || "—"}`,
+      `Location    : ${profile.location || "—"}`,
+      "",
+      "PROFESSIONAL DETAILS",
+      "--------------------",
+      `Current Company : ${profile.currentCompany || "—"}`,
+      `Current Role    : ${profile.currentRole || "—"}`,
+      `Preferred Type  : ${profile.preferredJobType || "—"}`,
+      `Expected Rate   : ${rate}`,
+      `Experience      : ${profile.experienceYears || 0} years`,
+      "",
+      "SKILLS",
+      "------",
+      skills,
+      "",
+      "PROFESSIONAL SUMMARY",
+      "--------------------",
+      profile.resumeSummary || "—",
+      "",
+      "WORK EXPERIENCE",
+      "---------------",
+      profile.resumeExperience || "—",
+      "",
+      "EDUCATION",
+      "---------",
+      profile.resumeEducation || "—",
+      "",
+      "ACHIEVEMENTS & CERTIFICATIONS",
+      "-----------------------------",
+      profile.resumeAchievements || "—",
+      "",
+      "================================================================",
+      "  Generated by MatchDB  |  http://localhost:3000",
+      "================================================================",
+    ].join("\n");
+
+    const filename = `resume-${username}-${now}.txt`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(lines);
+  } catch (err) {
     next(err);
   }
 }

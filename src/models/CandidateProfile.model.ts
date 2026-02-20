@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from "mongoose";
 export interface ICandidateProfile extends Document {
   _id: Types.ObjectId;
   candidateId: string;
+  username: string;   // matches User.username from shell-services (for profile URL)
   name: string;
   email: string;
   phone: string;
@@ -28,6 +29,7 @@ export interface ICandidateProfile extends Document {
 const CandidateProfileSchema = new Schema<ICandidateProfile>(
   {
     candidateId: { type: String, required: true, unique: true, index: true },
+    username: { type: String, default: "", index: true },
     name: { type: String, default: "" },
     email: { type: String, default: "" },
     phone: { type: String, default: "" },

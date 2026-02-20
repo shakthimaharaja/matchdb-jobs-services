@@ -7,6 +7,7 @@ export interface JwtUser {
   email: string;
   userType: 'candidate' | 'vendor' | 'admin';
   plan: string;
+  username: string;
 }
 
 declare global {
