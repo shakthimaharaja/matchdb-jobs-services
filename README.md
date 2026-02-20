@@ -21,10 +21,11 @@ Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchD
 matchdb-jobs-services/
 ├── src/
 │   ├── index.ts              # Entry point — connects MongoDB, starts server
-│   ├── app.ts                # Express app setup (routes, middleware)
+│   ├── app.ts                # Express app setup (routes, middleware, Swagger)
 │   ├── config/
 │   │   ├── env.ts            # Environment variable loading & validation
-│   │   └── mongoose.ts       # MongoDB connection helper
+│   │   ├── mongoose.ts       # MongoDB connection helper
+│   │   └── swagger.ts        # ★ OpenAPI 3.0 spec (all jobs/profiles/matching endpoints)
 │   ├── controllers/
 │   │   └── jobs.controller.ts     # CRUD for jobs, profiles, applications, matching, resume
 │   ├── middleware/
@@ -50,31 +51,31 @@ matchdb-jobs-services/
 
 ## API Endpoints
 
-| Method | Path                                | Auth      | Description                        |
-| ------ | ----------------------------------- | --------- | ---------------------------------- |
-| GET    | `/api/jobs/`                        | No        | List all active jobs               |
-| POST   | `/api/jobs/`                        | Vendor    | Create a new job                   |
-| GET    | `/api/jobs/:id`                     | Yes       | Get job details                    |
-| PUT    | `/api/jobs/:id`                     | Vendor    | Update a job (owner only)          |
-| DELETE | `/api/jobs/:id`                     | Vendor    | Delete a job (owner only)          |
-| PATCH  | `/api/jobs/:id/close`               | Vendor    | Close/deactivate a job             |
-| PATCH  | `/api/jobs/:id/reopen`              | Vendor    | Reopen a closed job                |
-| GET    | `/api/jobs/vendor/mine`             | Vendor    | Get vendor's own jobs              |
-| GET    | `/api/jobs/profiles/`               | Yes       | List candidate profiles            |
-| GET    | `/api/jobs/profiles-public`         | No        | List publicly visible profiles     |
-| POST   | `/api/jobs/profiles/`               | Candidate | Create / update own profile        |
-| GET    | `/api/jobs/profiles/me`             | Candidate | Get own candidate profile          |
-| POST   | `/api/jobs/applications/`           | Candidate | Apply to a job                     |
-| GET    | `/api/jobs/applications/mine`       | Candidate | Get own applications               |
-| GET    | `/api/jobs/applications/job/:id`    | Vendor    | Get applications for a job         |
-| PATCH  | `/api/jobs/applications/:id/status` | Vendor    | Update application status          |
-| GET    | `/api/jobs/match/:jobId`            | Vendor    | Match candidates to a job          |
-| GET    | `/api/jobs/jobmatches`              | Candidate | Ranked job matches for candidate   |
-| GET    | `/api/jobs/profilematches`          | Vendor    | Ranked candidate matches for vendor|
-| POST   | `/api/jobs/poke`                    | Yes       | Send a poke notification           |
-| GET    | `/api/jobs/resume/:username`        | No        | Public profile by username         |
-| GET    | `/api/jobs/resume/:username/download` | Yes    | Download candidate resume          |
-| GET    | `/health`                           | No        | Health check                       |
+| Method | Path                                  | Auth      | Description                         |
+| ------ | ------------------------------------- | --------- | ----------------------------------- |
+| GET    | `/api/jobs/`                          | No        | List all active jobs                |
+| POST   | `/api/jobs/`                          | Vendor    | Create a new job                    |
+| GET    | `/api/jobs/:id`                       | Yes       | Get job details                     |
+| PUT    | `/api/jobs/:id`                       | Vendor    | Update a job (owner only)           |
+| DELETE | `/api/jobs/:id`                       | Vendor    | Delete a job (owner only)           |
+| PATCH  | `/api/jobs/:id/close`                 | Vendor    | Close/deactivate a job              |
+| PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                 |
+| GET    | `/api/jobs/vendor/mine`               | Vendor    | Get vendor's own jobs               |
+| GET    | `/api/jobs/profiles/`                 | Yes       | List candidate profiles             |
+| GET    | `/api/jobs/profiles-public`           | No        | List publicly visible profiles      |
+| POST   | `/api/jobs/profiles/`                 | Candidate | Create / update own profile         |
+| GET    | `/api/jobs/profiles/me`               | Candidate | Get own candidate profile           |
+| POST   | `/api/jobs/applications/`             | Candidate | Apply to a job                      |
+| GET    | `/api/jobs/applications/mine`         | Candidate | Get own applications                |
+| GET    | `/api/jobs/applications/job/:id`      | Vendor    | Get applications for a job          |
+| PATCH  | `/api/jobs/applications/:id/status`   | Vendor    | Update application status           |
+| GET    | `/api/jobs/match/:jobId`              | Vendor    | Match candidates to a job           |
+| GET    | `/api/jobs/jobmatches`                | Candidate | Ranked job matches for candidate    |
+| GET    | `/api/jobs/profilematches`            | Vendor    | Ranked candidate matches for vendor |
+| POST   | `/api/jobs/poke`                      | Yes       | Send a poke notification            |
+| GET    | `/api/jobs/resume/:username`          | No        | Public profile by username          |
+| GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume           |
+| GET    | `/health`                             | No        | Health check                        |
 
 ## Data Models
 
@@ -151,3 +152,7 @@ The server starts on **http://localhost:8001**.
 | `npm run dev`   | Start with hot reload (tsx watch) |
 | `npm run build` | Compile TypeScript to `dist/`     |
 | `npm start`     | Run compiled output               |
+
+## API Documentation (Swagger)
+
+Interactive API docs are available at **http://localhost:8001/api-docs** when the server is running. The OpenAPI 3.0 spec is defined inline in `src/config/swagger.ts` and covers all jobs, profiles, applications, matching, resume, and poke endpoints with request/response schemas.
