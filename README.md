@@ -2,6 +2,8 @@
 
 Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchDB staffing platform.
 
+---
+
 ## Tech Stack
 
 | Layer      | Technology                                         |
@@ -15,17 +17,19 @@ Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchD
 | Validation | Zod                                                |
 | Security   | Helmet, CORS                                       |
 
+---
+
 ## Project Structure
 
 ```
 matchdb-jobs-services/
 ├── src/
 │   ├── index.ts              # Entry point — connects MongoDB, starts server
-│   ├── app.ts                # Express app setup (routes, middleware, Swagger)
+│   ├── app.ts                # Express app (routes, middleware, Swagger)
 │   ├── config/
 │   │   ├── env.ts            # Environment variable loading & validation
 │   │   ├── mongoose.ts       # MongoDB connection helper
-│   │   └── swagger.ts        # ★ OpenAPI 3.0 spec (all jobs/profiles/matching endpoints)
+│   │   └── swagger.ts        # OpenAPI 3.0 spec (all endpoints)
 │   ├── controllers/
 │   │   └── jobs.controller.ts     # CRUD for jobs, profiles, applications, matching, resume
 │   ├── middleware/
@@ -35,7 +39,8 @@ matchdb-jobs-services/
 │   │   ├── Job.model.ts              # Job posting schema
 │   │   ├── CandidateProfile.model.ts # Candidate profile + resume schema
 │   │   ├── Application.model.ts      # Job application schema
-│   │   └── PokeLog.model.ts          # Monthly poke rate-limit tracking
+│   │   ├── PokeLog.model.ts          # Monthly poke rate-limit tracking
+│   │   └── PokeRecord.model.ts       # Poke interaction records
 │   ├── routes/
 │   │   └── jobs.routes.ts        # /api/jobs/*
 │   └── services/
@@ -44,10 +49,12 @@ matchdb-jobs-services/
 │       └── sendgrid.service.ts       # Email dispatch
 ├── seed.ts                   # Create demo jobs, profiles (with resumes), applications
 ├── env/
-│   └── .env.development      # Local env vars (create from template below)
+│   └── .env.development      # Local env vars
 ├── package.json
 └── tsconfig.json
 ```
+
+---
 
 ## API Endpoints
 
@@ -77,6 +84,8 @@ matchdb-jobs-services/
 | GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume           |
 | GET    | `/health`                             | No        | Health check                        |
 
+---
+
 ## Data Models
 
 ### Job
@@ -96,21 +105,29 @@ matchdb-jobs-services/
 Rate-limits poke interactions per user per month:
 `userId`, `yearMonth` (YYYY-MM format), `count` — unique compound index on `(userId, yearMonth)`
 
+---
+
 ## Skill Extraction
 
 The `skill-extractor.service.ts` auto-extracts skills from free-form text (resumes, job descriptions) using a curated list of ~150 keywords across: Languages, Frontend, Backend, Databases, Cloud/DevOps, Data/AI/ML, Tools, Mobile, Testing. Case-insensitive with word-boundary matching.
+
+---
 
 ## Seed Data
 
 Creates 19 jobs, 10 candidate profiles (with full resume data), and 25 applications. Profile IDs are synced with shell-services seed users. Each candidate profile includes `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, and `visibilityConfig`.
 
-## Prerequisites
+---
+
+## Getting Started
+
+### Prerequisites
 
 - **Node.js** ≥ 18
 - **npm** ≥ 9
 - **MongoDB** running locally on port 27017 (or a remote URI)
 
-## Environment Variables
+### Environment Variables
 
 Create `env/.env.development`:
 
@@ -127,7 +144,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:4000,h
 
 > **Note:** The `JWT_SECRET` must match the one used in `matchdb-shell-services` since tokens are issued there and verified here.
 
-## Getting Started
+### Install & Run
 
 ```bash
 # 1. Install dependencies
@@ -145,7 +162,9 @@ npm run dev
 
 The server starts on **http://localhost:8001**.
 
-## Available Scripts
+---
+
+## Scripts
 
 | Script          | Description                       |
 | --------------- | --------------------------------- |
@@ -156,3 +175,9 @@ The server starts on **http://localhost:8001**.
 ## API Documentation (Swagger)
 
 Interactive API docs are available at **http://localhost:8001/api-docs** when the server is running. The OpenAPI 3.0 spec is defined inline in `src/config/swagger.ts` and covers all jobs, profiles, applications, matching, resume, and poke endpoints with request/response schemas.
+
+---
+
+## License
+
+MIT
