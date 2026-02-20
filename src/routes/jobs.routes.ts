@@ -14,6 +14,8 @@ import {
   candidateMatches,
   vendorCandidates,
   poke,
+  getPokesSent,
+  getPokesReceived,
   closeJob,
   reopenJob,
   getProfileByUsername,
@@ -46,6 +48,8 @@ router.post("/create", requireVendor, createJob);
 
 // Shared
 router.post("/poke", requireAuth, poke);
+router.get("/pokes/sent", requireAuth, getPokesSent);
+router.get("/pokes/received", requireAuth, getPokesReceived);
 
 // Public resume routes (must be BEFORE /:id to avoid collision)
 router.get("/resume/:username", getProfileByUsername);

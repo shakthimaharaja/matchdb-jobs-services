@@ -4,6 +4,7 @@ import { Job } from "../models/Job.model";
 import { Application } from "../models/Application.model";
 import { CandidateProfile } from "../models/CandidateProfile.model";
 import { PokeLog } from "../models/PokeLog.model";
+import { PokeRecord } from "../models/PokeRecord.model";
 import {
   matchCandidateToJobs,
   matchJobsToCandidates,
@@ -632,25 +633,50 @@ export async function poke(
 ): Promise<void> {
   try {
     const schema = z.object({
-      to_email: z.string().email(),
-      to_name: z.string().min(1),
-      subject_context: z.string().min(1),
+      to_email:          z.string().email(),
+      to_name:           z.string().min(1),
+      subject_context:   z.string().min(1),
+      email_body:        z.string().optional(),
+      target_id:         z.string().min(1),         // candidateProfileId | jobId
+      target_vendor_id:  z.string().optional(),      // vendorId of job (when candidate sends)
+      is_email:          z.boolean().default(false),
+      sender_name:       z.string().optional(),
+      sender_email:      z.string().optional(),
+      pdf_attachment:    z.string().optional(),      // base64 PDF (candidate resume)
+      job_id:            z.string().optional(),
+      job_title:         z.string().optional(),
     });
-    const { to_email, to_name, subject_context } = schema.parse(req.body);
+    const {
+      to_email, to_name, subject_context, email_body,
+      target_id, target_vendor_id, is_email,
+      sender_name, sender_email, pdf_attachment,
+      job_id, job_title,
+    } = schema.parse(req.body);
+
+    // ── Once-per enforcement ──────────────────────────────────────────────
+    const already = await PokeRecord.findOne({
+      senderId: req.user!.userId,
+      targetId: target_id,
+      isEmail: is_email,
+    });
+    if (already) {
+      const action = is_email ? 'emailed' : 'poked';
+      const target = req.user!.userType === 'vendor' ? 'candidate' : 'job posting';
+      res.status(409).json({ error: `You have already ${action} this ${target}.` });
+      return;
+    }
 
     // ── Monthly poke limit enforcement ────────────────────────────────────
     const plan = req.user!.plan || 'free';
     const pokeLimit = POKE_LIMITS[plan] ?? 5;
     if (isFinite(pokeLimit)) {
-      const yearMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-      // Atomically increment first, then check — decrement if over limit
+      const yearMonth = new Date().toISOString().slice(0, 7);
       const log = await PokeLog.findOneAndUpdate(
         { userId: req.user!.userId, yearMonth },
         { $inc: { count: 1 } },
         { upsert: true, new: true },
       );
       if (log.count > pokeLimit) {
-        // Roll back the increment
         await PokeLog.updateOne(
           { userId: req.user!.userId, yearMonth },
           { $inc: { count: -1 } },
@@ -665,17 +691,91 @@ export async function poke(
     await sendPokeEmail({
       to: to_email,
       toName: to_name,
-      fromName: req.user!.userId,
-      fromEmail: req.user!.email,
+      fromName: sender_name || req.user!.userId,
+      fromEmail: sender_email || req.user!.email,
       subjectContext: subject_context,
+      emailBody: email_body,
+      pdfAttachment: pdf_attachment,
+      pdfFilename: `${to_name.replace(/\s+/g, '_')}_resume.pdf`,
     });
 
-    res.json({ message: `Poke sent to ${to_name} successfully.` });
+    // ── Persist poke record ───────────────────────────────────────────────
+    await PokeRecord.create({
+      senderId:       req.user!.userId,
+      senderName:     sender_name || '',
+      senderEmail:    sender_email || req.user!.email,
+      senderType:     req.user!.userType as 'vendor' | 'candidate',
+      targetId:       target_id,
+      targetVendorId: target_vendor_id,
+      targetEmail:    to_email,
+      targetName:     to_name,
+      subject:        subject_context,
+      isEmail:        is_email,
+      jobId:          job_id,
+      jobTitle:       job_title,
+    });
+
+    res.json({ message: `${is_email ? 'Email' : 'Poke'} sent to ${to_name} successfully.` });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: err.errors[0]?.message });
       return;
     }
+    next(err);
+  }
+}
+
+// GET /api/jobs/pokes/sent — all pokes/emails the authenticated user has sent
+export async function getPokesSent(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const records = await PokeRecord.find({ senderId: req.user!.userId })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    res.json(records.map((r: any) => toSnakeCase({ ...r, id: r._id.toString() })));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/jobs/pokes/received — pokes/emails received by the authenticated user
+export async function getPokesReceived(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    let records: any[];
+    if (req.user!.userType === 'vendor') {
+      // Vendor receives = candidate pokes to vendor's job postings
+      records = await PokeRecord.find({
+        targetVendorId: req.user!.userId,
+        senderType: 'candidate',
+      })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean();
+    } else {
+      // Candidate receives = vendor pokes to this candidate's profile
+      const profile = await CandidateProfile.findOne({ candidateId: req.user!.userId });
+      if (!profile) {
+        res.json([]);
+        return;
+      }
+      records = await PokeRecord.find({
+        targetId: profile._id.toString(),
+        senderType: 'vendor',
+      })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean();
+    }
+    res.json(records.map((r: any) => toSnakeCase({ ...r, id: r._id.toString() })));
+  } catch (err) {
     next(err);
   }
 }
