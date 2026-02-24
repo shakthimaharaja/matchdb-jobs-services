@@ -16,18 +16,18 @@ import { AppError } from "../middleware/error.middleware";
 // ─── Plan Limit Tables ────────────────────────────────────────────────────────
 
 const JOB_POSTING_LIMITS: Record<string, number> = {
-  free:       0,
-  basic:      5,
-  pro:        10,
-  pro_plus:   20,
+  free: 0,
+  basic: 5,
+  pro: 10,
+  pro_plus: 20,
   enterprise: Infinity,
 };
 
 const POKE_LIMITS: Record<string, number> = {
-  free:       5,
-  basic:      25,
-  pro:        50,
-  pro_plus:   Infinity,
+  free: 5,
+  basic: 25,
+  pro: 50,
+  pro_plus: Infinity,
   enterprise: Infinity,
 };
 
@@ -78,33 +78,98 @@ function profileToJSON(p: any) {
   return toSnakeCase(flat);
 }
 
-// GET /api/jobs — all active jobs
+// Pagination helper — parses page/limit from query string
+function parsePagination(query: any): {
+  page: number;
+  limit: number;
+  skip: number;
+} {
+  const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(query.limit as string, 10) || 25),
+  );
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+// GET /api/jobs — active jobs, paginated for authenticated users
+// Public (no page param) → returns all; with ?page=1&limit=25 → paginated envelope
 export async function listJobs(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const jobs = await Job.find({ isActive: true }).sort({ createdAt: -1 });
-    res.json(jobs.map(jobToJSON));
+    const wantPaginated = req.query.page !== undefined;
+
+    if (wantPaginated) {
+      const { page, limit, skip } = parsePagination(req.query);
+      const [data, total] = await Promise.all([
+        Job.find({ isActive: true })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Job.countDocuments({ isActive: true }),
+      ]);
+      res.json({
+        data: data.map((j: any) => jobToJSON({ ...j, toObject: () => j })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    } else {
+      // Public / legacy — return flat array (no pagination)
+      const jobs = await Job.find({ isActive: true })
+        .sort({ createdAt: -1 })
+        .lean();
+      res.json(jobs.map((j: any) => jobToJSON({ ...j, toObject: () => j })));
+    }
   } catch (err) {
     next(err);
   }
 }
 
 // GET /api/jobs/profiles-public — public candidate profile listing (limited fields)
+// Public (no page param) → returns all; with ?page=1&limit=25 → paginated envelope
 export async function listPublicProfiles(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const profiles = await CandidateProfile.find()
-      .select(
-        "name currentRole currentCompany preferredJobType experienceYears skills location",
-      )
-      .sort({ createdAt: -1 });
-    res.json(profiles.map(profileToJSON));
+    const selectFields =
+      "name currentRole currentCompany preferredJobType experienceYears expectedHourlyRate skills location";
+    const wantPaginated = req.query.page !== undefined;
+
+    if (wantPaginated) {
+      const { page, limit, skip } = parsePagination(req.query);
+      const [data, total] = await Promise.all([
+        CandidateProfile.find()
+          .select(selectFields)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        CandidateProfile.countDocuments(),
+      ]);
+      res.json({
+        data: data.map((p: any) => profileToJSON({ ...p, toObject: () => p })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    } else {
+      const profiles = await CandidateProfile.find()
+        .select(selectFields)
+        .sort({ createdAt: -1 })
+        .lean();
+      res.json(
+        profiles.map((p: any) => profileToJSON({ ...p, toObject: () => p })),
+      );
+    }
   } catch (err) {
     next(err);
   }
@@ -123,6 +188,9 @@ export async function createJob(
       title: z.string().min(2),
       description: z.string().min(10),
       location: z.string().optional(),
+      jobCountry: z.string().min(2, "Country is required for job posting"),
+      jobState: z.string().optional(),
+      jobCity: z.string().optional(),
       jobType: z
         .enum(["full_time", "part_time", "contract", "internship"])
         .optional(),
@@ -140,7 +208,7 @@ export async function createJob(
     const body = schema.parse(incoming);
 
     // ── Job posting limit enforcement ──────────────────────────────────────
-    const plan = req.user!.plan || 'free';
+    const plan = req.user!.plan || "free";
     const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
     if (isFinite(jobLimit)) {
       const activeCount = await Job.countDocuments({
@@ -150,7 +218,7 @@ export async function createJob(
       if (activeCount >= jobLimit) {
         const err: AppError = new Error(
           jobLimit === 0
-            ? 'Job posting requires a paid vendor subscription. Please upgrade at /pricing.'
+            ? "Job posting requires a paid vendor subscription. Please upgrade at /pricing."
             : `Your ${plan} plan allows up to ${jobLimit} active job postings. Close an existing posting or upgrade your plan.`,
         );
         err.statusCode = 403;
@@ -285,7 +353,7 @@ export async function reopenJob(
     }
 
     // ── Reopen limit enforcement (same cap as createJob) ───────────────────
-    const plan = req.user!.plan || 'free';
+    const plan = req.user!.plan || "free";
     const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
     if (isFinite(jobLimit)) {
       const activeCount = await Job.countDocuments({
@@ -295,7 +363,7 @@ export async function reopenJob(
       if (activeCount >= jobLimit) {
         const err: AppError = new Error(
           jobLimit === 0
-            ? 'Job posting requires a paid vendor subscription. Please upgrade at /pricing.'
+            ? "Job posting requires a paid vendor subscription. Please upgrade at /pricing."
             : `Your ${plan} plan allows up to ${jobLimit} active job postings. Close another posting first or upgrade your plan.`,
         );
         err.statusCode = 403;
@@ -321,26 +389,43 @@ export async function myApplications(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const apps = await Application.find({ candidateId: req.user!.userId }).sort(
-      { createdAt: -1 },
-    );
-    res.json(apps.map(profileToJSON));
+    const apps = await Application.find({ candidateId: req.user!.userId })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(apps.map((a: any) => profileToJSON({ ...a, toObject: () => a })));
   } catch (err) {
     next(err);
   }
 }
 
 // GET /api/jobs/vendor — vendor's own jobs
+// GET /api/jobs/vendor — vendor's own jobs (paginated)
 export async function vendorJobs(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const jobs = await Job.find({ vendorId: req.user!.userId }).sort({
-      createdAt: -1,
-    });
-    res.json(jobs.map(jobToJSON));
+    const filter = { vendorId: req.user!.userId };
+    const wantPaginated = req.query.page !== undefined;
+
+    if (wantPaginated) {
+      const { page, limit, skip } = parsePagination(req.query);
+      const [data, total] = await Promise.all([
+        Job.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+        Job.countDocuments(filter),
+      ]);
+      res.json({
+        data: data.map((j: any) => jobToJSON({ ...j, toObject: () => j })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    } else {
+      const jobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
+      res.json(jobs.map((j: any) => jobToJSON({ ...j, toObject: () => j })));
+    }
   } catch (err) {
     next(err);
   }
@@ -388,6 +473,12 @@ export async function createProfile(
     const incoming = toCamelCase(req.body);
     if (rawVisibilityConfig !== undefined) {
       incoming.visibilityConfig = rawVisibilityConfig;
+    }
+
+    // Require profileCountry (subscription country) for new profiles
+    if (!incoming.profileCountry) {
+      res.status(400).json({ error: "Subscription country is required." });
+      return;
     }
 
     const profile = await CandidateProfile.create({
@@ -438,11 +529,9 @@ export async function updateProfile(
           existingVal &&
           !incomingVal.startsWith(existingVal)
         ) {
-          res
-            .status(400)
-            .json({
-              error: `Cannot modify existing content in ${field}. You may only append new content.`,
-            });
+          res.status(400).json({
+            error: `Cannot modify existing content in ${field}. You may only append new content.`,
+          });
           return;
         }
       }
@@ -452,11 +541,9 @@ export async function updateProfile(
         incoming.experienceYears != null &&
         incoming.experienceYears < existing.experienceYears
       ) {
-        res
-          .status(400)
-          .json({
-            error: "Experience years can only be increased, not decreased.",
-          });
+        res.status(400).json({
+          error: "Experience years can only be increased, not decreased.",
+        });
         return;
       }
 
@@ -514,7 +601,12 @@ export async function updateProfile(
         skills: mergedSkills,
       };
     } else {
-      // First-time creation — extract skills from resume text and lock the profile
+      // First-time creation — require profileCountry
+      if (!incoming.profileCountry) {
+        res.status(400).json({ error: "Subscription country is required." });
+        return;
+      }
+      // Extract skills from resume text and lock the profile
       const resumeText = [
         incoming.resumeSummary || "",
         incoming.resumeExperience || "",
@@ -562,7 +654,7 @@ export async function deleteProfile(
   }
 }
 
-// GET /api/jobs/matches — ranked jobs for candidate
+// GET /api/jobs/matches — ranked jobs for candidate (paginated)
 export async function candidateMatches(
   req: Request,
   res: Response,
@@ -573,26 +665,91 @@ export async function candidateMatches(
       candidateId: req.user!.userId,
     });
     if (!profile) {
-      res.json([]);
+      res.json(
+        req.query.page !== undefined
+          ? { data: [], total: 0, page: 1, limit: 25, totalPages: 0 }
+          : [],
+      );
       return;
     }
 
-    const jobs = await Job.find({ isActive: true });
-    const matched = matchCandidateToJobs(profile, jobs);
-    // Convert matched results to snake_case
-    res.json(
-      matched.map((m: any) => {
+    const jobs = await Job.find({ isActive: true }).lean();
+    const allMatched = matchCandidateToJobs(profile, jobs as any);
+
+    // ── Location-based filtering ──
+    // Candidates only see jobs from their subscription country (strict match)
+    const candidateCountry = (profile as any).profileCountry || "";
+    const locationFiltered = candidateCountry
+      ? allMatched.filter((m: any) => {
+          const obj = typeof m.toObject === "function" ? m.toObject() : m;
+          const jobCountry = obj.jobCountry || obj.job_country || "";
+          // Strict match: only show jobs whose country matches the candidate's subscription country
+          return jobCountry === candidateCountry;
+        })
+      : allMatched;
+
+    // Filter by allowed types if specified (from membership config)
+    const typesParam = req.query.types as string | undefined;
+    const allowedTypes = typesParam
+      ? typesParam.split(",").map((t: string) => t.trim())
+      : null;
+    const matched = allowedTypes
+      ? locationFiltered.filter((m: any) => {
+          const obj = typeof m.toObject === "function" ? m.toObject() : m;
+          const jt = obj.jobType || obj.job_type || "";
+          return allowedTypes.includes(jt);
+        })
+      : locationFiltered;
+
+    const wantPaginated = req.query.page !== undefined;
+    if (wantPaginated) {
+      const { page, limit, skip } = parsePagination(req.query);
+      const total = matched.length;
+      const sliced = matched.slice(skip, skip + limit);
+
+      // Aggregate type/subtype counts from the FULL matched set
+      const typeCounts: Record<string, number> = {};
+      const subTypeCounts: Record<string, Record<string, number>> = {};
+      for (const m of matched) {
         const obj = typeof m.toObject === "function" ? m.toObject() : m;
-        const flat = { ...obj, id: obj._id?.toString() || obj.id };
-        return toSnakeCase(flat);
-      }),
-    );
+        const jt = obj.jobType || obj.job_type || "other";
+        typeCounts[jt] = (typeCounts[jt] || 0) + 1;
+        const jst = obj.jobSubType || obj.job_sub_type || "";
+        if (jst) {
+          if (!subTypeCounts[jt]) subTypeCounts[jt] = {};
+          subTypeCounts[jt][jst] = (subTypeCounts[jt][jst] || 0) + 1;
+        }
+      }
+
+      res.json({
+        data: sliced.map((m: any) => {
+          const obj = typeof m.toObject === "function" ? m.toObject() : m;
+          const flat = { ...obj, id: obj._id?.toString() || obj.id };
+          return toSnakeCase(flat);
+        }),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        typeCounts,
+        subTypeCounts,
+      });
+    } else {
+      // Convert matched results to snake_case
+      res.json(
+        matched.map((m: any) => {
+          const obj = typeof m.toObject === "function" ? m.toObject() : m;
+          const flat = { ...obj, id: obj._id?.toString() || obj.id };
+          return toSnakeCase(flat);
+        }),
+      );
+    }
   } catch (err) {
     next(err);
   }
 }
 
-// GET /api/jobs/vendor-candidates?job_id=xxx — ranked candidates for vendor
+// GET /api/jobs/vendor-candidates?job_id=xxx — ranked candidates for vendor (paginated)
 export async function vendorCandidates(
   req: Request,
   res: Response,
@@ -604,22 +761,59 @@ export async function vendorCandidates(
     const jobQuery: any = { vendorId: req.user!.userId, isActive: true };
     if (job_id) jobQuery._id = job_id;
 
-    const jobs = await Job.find(jobQuery);
+    const jobs = await Job.find(jobQuery).lean();
     if (!jobs.length) {
-      res.json([]);
+      res.json(
+        req.query.page !== undefined
+          ? { data: [], total: 0, page: 1, limit: 25, totalPages: 0 }
+          : [],
+      );
       return;
     }
 
-    const profiles = await CandidateProfile.find({});
-    const matched = matchJobsToCandidates(jobs, profiles);
-    // Convert matched results to snake_case
-    res.json(
-      matched.map((m: any) => {
-        const obj = typeof m.toObject === "function" ? m.toObject() : m;
-        const flat = { ...obj, id: obj._id?.toString() || obj.id };
-        return toSnakeCase(flat);
-      }),
+    // ── Location-based filtering: only show candidates whose profileCountry matches job country ──
+    // Collect the set of countries from the vendor's active jobs being queried
+    const jobCountries = new Set(
+      jobs
+        .map((j: any) => j.jobCountry || "")
+        .filter(Boolean),
     );
+
+    // Filter candidates by location: candidate's profileCountry must match at least one job's country
+    const profileFilter: any = {};
+    if (jobCountries.size > 0) {
+      profileFilter.profileCountry = { $in: Array.from(jobCountries) };
+    }
+
+    const profiles = await CandidateProfile.find(profileFilter).lean();
+    const matched = matchJobsToCandidates(jobs as any, profiles as any);
+
+    const wantPaginated = req.query.page !== undefined;
+    if (wantPaginated) {
+      const { page, limit, skip } = parsePagination(req.query);
+      const total = matched.length;
+      const sliced = matched.slice(skip, skip + limit);
+      res.json({
+        data: sliced.map((m: any) => {
+          const obj = typeof m.toObject === "function" ? m.toObject() : m;
+          const flat = { ...obj, id: obj._id?.toString() || obj.id };
+          return toSnakeCase(flat);
+        }),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    } else {
+      // Convert matched results to snake_case
+      res.json(
+        matched.map((m: any) => {
+          const obj = typeof m.toObject === "function" ? m.toObject() : m;
+          const flat = { ...obj, id: obj._id?.toString() || obj.id };
+          return toSnakeCase(flat);
+        }),
+      );
+    }
   } catch (err) {
     next(err);
   }
@@ -633,24 +827,32 @@ export async function poke(
 ): Promise<void> {
   try {
     const schema = z.object({
-      to_email:          z.string().email(),
-      to_name:           z.string().min(1),
-      subject_context:   z.string().min(1),
-      email_body:        z.string().optional(),
-      target_id:         z.string().min(1),         // candidateProfileId | jobId
-      target_vendor_id:  z.string().optional(),      // vendorId of job (when candidate sends)
-      is_email:          z.boolean().default(false),
-      sender_name:       z.string().optional(),
-      sender_email:      z.string().optional(),
-      pdf_attachment:    z.string().optional(),      // base64 PDF (candidate resume)
-      job_id:            z.string().optional(),
-      job_title:         z.string().optional(),
+      to_email: z.string().email(),
+      to_name: z.string().min(1),
+      subject_context: z.string().min(1),
+      email_body: z.string().optional(),
+      target_id: z.string().min(1), // candidateProfileId | jobId
+      target_vendor_id: z.string().optional(), // vendorId of job (when candidate sends)
+      is_email: z.boolean().default(false),
+      sender_name: z.string().optional(),
+      sender_email: z.string().optional(),
+      pdf_attachment: z.string().optional(), // base64 PDF (candidate resume)
+      job_id: z.string().optional(),
+      job_title: z.string().optional(),
     });
     const {
-      to_email, to_name, subject_context, email_body,
-      target_id, target_vendor_id, is_email,
-      sender_name, sender_email, pdf_attachment,
-      job_id, job_title,
+      to_email,
+      to_name,
+      subject_context,
+      email_body,
+      target_id,
+      target_vendor_id,
+      is_email,
+      sender_name,
+      sender_email,
+      pdf_attachment,
+      job_id,
+      job_title,
     } = schema.parse(req.body);
 
     // ── Once-per enforcement ──────────────────────────────────────────────
@@ -660,14 +862,17 @@ export async function poke(
       isEmail: is_email,
     });
     if (already) {
-      const action = is_email ? 'emailed' : 'poked';
-      const target = req.user!.userType === 'vendor' ? 'candidate' : 'job posting';
-      res.status(409).json({ error: `You have already ${action} this ${target}.` });
+      const action = is_email ? "emailed" : "poked";
+      const target =
+        req.user!.userType === "vendor" ? "candidate" : "job posting";
+      res
+        .status(409)
+        .json({ error: `You have already ${action} this ${target}.` });
       return;
     }
 
     // ── Monthly poke limit enforcement ────────────────────────────────────
-    const plan = req.user!.plan || 'free';
+    const plan = req.user!.plan || "free";
     const pokeLimit = POKE_LIMITS[plan] ?? 5;
     if (isFinite(pokeLimit)) {
       const yearMonth = new Date().toISOString().slice(0, 7);
@@ -696,26 +901,28 @@ export async function poke(
       subjectContext: subject_context,
       emailBody: email_body,
       pdfAttachment: pdf_attachment,
-      pdfFilename: `${to_name.replace(/\s+/g, '_')}_resume.pdf`,
+      pdfFilename: `${to_name.replace(/\s+/g, "_")}_resume.pdf`,
     });
 
     // ── Persist poke record ───────────────────────────────────────────────
     await PokeRecord.create({
-      senderId:       req.user!.userId,
-      senderName:     sender_name || '',
-      senderEmail:    sender_email || req.user!.email,
-      senderType:     req.user!.userType as 'vendor' | 'candidate',
-      targetId:       target_id,
+      senderId: req.user!.userId,
+      senderName: sender_name || "",
+      senderEmail: sender_email || req.user!.email,
+      senderType: req.user!.userType as "vendor" | "candidate",
+      targetId: target_id,
       targetVendorId: target_vendor_id,
-      targetEmail:    to_email,
-      targetName:     to_name,
-      subject:        subject_context,
-      isEmail:        is_email,
-      jobId:          job_id,
-      jobTitle:       job_title,
+      targetEmail: to_email,
+      targetName: to_name,
+      subject: subject_context,
+      isEmail: is_email,
+      jobId: job_id,
+      jobTitle: job_title,
     });
 
-    res.json({ message: `${is_email ? 'Email' : 'Poke'} sent to ${to_name} successfully.` });
+    res.json({
+      message: `${is_email ? "Email" : "Poke"} sent to ${to_name} successfully.`,
+    });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: err.errors[0]?.message });
@@ -736,7 +943,9 @@ export async function getPokesSent(
       .sort({ createdAt: -1 })
       .limit(200)
       .lean();
-    res.json(records.map((r: any) => toSnakeCase({ ...r, id: r._id.toString() })));
+    res.json(
+      records.map((r: any) => toSnakeCase({ ...r, id: r._id.toString() })),
+    );
   } catch (err) {
     next(err);
   }
@@ -750,31 +959,35 @@ export async function getPokesReceived(
 ): Promise<void> {
   try {
     let records: any[];
-    if (req.user!.userType === 'vendor') {
+    if (req.user!.userType === "vendor") {
       // Vendor receives = candidate pokes to vendor's job postings
       records = await PokeRecord.find({
         targetVendorId: req.user!.userId,
-        senderType: 'candidate',
+        senderType: "candidate",
       })
         .sort({ createdAt: -1 })
         .limit(200)
         .lean();
     } else {
       // Candidate receives = vendor pokes to this candidate's profile
-      const profile = await CandidateProfile.findOne({ candidateId: req.user!.userId });
+      const profile = await CandidateProfile.findOne({
+        candidateId: req.user!.userId,
+      });
       if (!profile) {
         res.json([]);
         return;
       }
       records = await PokeRecord.find({
         targetId: profile._id.toString(),
-        senderType: 'vendor',
+        senderType: "vendor",
       })
         .sort({ createdAt: -1 })
         .limit(200)
         .lean();
     }
-    res.json(records.map((r: any) => toSnakeCase({ ...r, id: r._id.toString() })));
+    res.json(
+      records.map((r: any) => toSnakeCase({ ...r, id: r._id.toString() })),
+    );
   } catch (err) {
     next(err);
   }
@@ -816,7 +1029,9 @@ export async function downloadResume(
 
     const now = new Date().toISOString().slice(0, 10);
     const skills = profile.skills?.join(", ") || "—";
-    const rate = profile.expectedHourlyRate ? `$${profile.expectedHourlyRate}/hr` : "—";
+    const rate = profile.expectedHourlyRate
+      ? `$${profile.expectedHourlyRate}/hr`
+      : "—";
 
     const lines = [
       "================================================================",

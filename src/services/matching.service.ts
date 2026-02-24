@@ -75,10 +75,11 @@ export function matchCandidateToJobs(
         job.experienceRequired,
       );
       const pct = Math.round(skills * 0.6 + type * 0.15 + exp * 0.25);
+      const obj = typeof job.toObject === "function" ? job.toObject() : job;
 
       return {
-        ...job.toObject(),
-        id: job._id.toString(),
+        ...obj,
+        id: (job._id || (job as any).id)?.toString(),
         matchPercentage: pct,
         matchBreakdown: { skills, type, experience: exp },
       } as unknown as MatchedJob;
@@ -112,16 +113,20 @@ export function matchJobsToCandidates(
 
       if (pct > bestPct) {
         bestPct = pct;
-        bestJobId = job._id.toString();
+        bestJobId = (job._id || (job as any).id)?.toString();
         bestJobTitle = job.title;
         bestBreakdown = { skills, type, experience: exp };
       }
     }
 
     if (bestPct > 0) {
+      const obj =
+        typeof candidate.toObject === "function"
+          ? candidate.toObject()
+          : candidate;
       results.push({
-        ...candidate.toObject(),
-        id: candidate._id.toString(),
+        ...obj,
+        id: (candidate._id || (candidate as any).id)?.toString(),
         matchPercentage: bestPct,
         matchedJobId: bestJobId,
         matchedJobTitle: bestJobTitle,

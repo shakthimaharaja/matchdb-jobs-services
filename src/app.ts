@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import cors from "cors";
 import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
@@ -8,6 +9,9 @@ import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 
 const app = express();
+
+// Gzip compression — reduces API response size 60-80%
+app.use(compression());
 
 app.use(helmet());
 app.use(

@@ -3,7 +3,7 @@ import { Schema, model, Document, Types } from "mongoose";
 export interface ICandidateProfile extends Document {
   _id: Types.ObjectId;
   candidateId: string;
-  username: string;   // matches User.username from shell-services (for profile URL)
+  username: string; // matches User.username from shell-services (for profile URL)
   name: string;
   email: string;
   phone: string;
@@ -14,6 +14,7 @@ export interface ICandidateProfile extends Document {
   experienceYears: number;
   skills: string[];
   location: string;
+  profileCountry: string;
   bio: string;
   // Resume sections — captured on profile creation, locked after
   resumeSummary: string;
@@ -40,6 +41,7 @@ const CandidateProfileSchema = new Schema<ICandidateProfile>(
     experienceYears: { type: Number, default: 0 },
     skills: [{ type: String }],
     location: { type: String, default: "" },
+    profileCountry: { type: String, default: "", index: true },
     bio: { type: String, default: "" },
     resumeSummary: { type: String, default: "" },
     resumeExperience: { type: String, default: "" },
@@ -50,6 +52,10 @@ const CandidateProfileSchema = new Schema<ICandidateProfile>(
   },
   { timestamps: true },
 );
+
+// Compound index for paginated public listing
+CandidateProfileSchema.index({ createdAt: -1 });
+CandidateProfileSchema.index({ experienceYears: -1, createdAt: -1 });
 
 export const CandidateProfile = model<ICandidateProfile>(
   "CandidateProfile",

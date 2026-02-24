@@ -104,7 +104,7 @@ async function main() {
   await AppModel.deleteMany({});
 
   // ═══════════════════════════════════════════
-  // JOBS (20)
+  // JOBS (21)
   // ═══════════════════════════════════════════
   const jobs = await JobModel.insertMany([
     // ── Dan Brown @ TechCorp (3 jobs) ──
@@ -496,6 +496,44 @@ async function main() {
       payPerHour: 100,
       skillsRequired: ["Solidity", "Ethereum", "Hardhat", "Web3.js", "DeFi"],
       experienceRequired: 3,
+      isActive: true,
+    },
+
+    // ── Extra full-time W2 jobs (Paula & Quinn) ──
+    {
+      title: ".NET / C# Backend Developer",
+      description:
+        "Build and maintain enterprise .NET microservices using C#, ASP.NET Core, and Azure. Experience with Entity Framework, SQL Server, and CI/CD pipelines required.",
+      vendorId: PAULA_ID,
+      vendorEmail: "paula@workforce360.com",
+      recruiterName: "Paula Rivera",
+      recruiterPhone: "+1-555-0606",
+      location: "Atlanta, GA",
+      jobType: "full_time",
+      jobSubType: "w2",
+      salaryMin: 110000,
+      salaryMax: 145000,
+      payPerHour: 65,
+      skillsRequired: ["C#", ".NET", "ASP.NET Core", "SQL Server", "Azure", "Docker"],
+      experienceRequired: 4,
+      isActive: true,
+    },
+    {
+      title: "Cloud Solutions Architect",
+      description:
+        "Design and implement cloud-native architectures on AWS and Azure. Lead migration strategies, cost optimization, and multi-region deployments for enterprise clients.",
+      vendorId: QUINN_ID,
+      vendorEmail: "quinn@staffplus.com",
+      recruiterName: "Quinn Adams",
+      recruiterPhone: "+1-555-0707",
+      location: "Boston, MA",
+      jobType: "full_time",
+      jobSubType: "w2",
+      salaryMin: 150000,
+      salaryMax: 200000,
+      payPerHour: 110,
+      skillsRequired: ["AWS", "Azure", "Terraform", "Kubernetes", "CI/CD", "Python"],
+      experienceRequired: 6,
       isActive: true,
     },
   ]);
