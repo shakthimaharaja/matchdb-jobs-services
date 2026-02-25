@@ -92,6 +92,34 @@ function parsePagination(query: any): {
   return { page, limit, skip: (page - 1) * limit };
 }
 
+// GET /api/jobs/count — lightweight count of active jobs
+export async function countJobs(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const count = await Job.countDocuments({ isActive: true });
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/jobs/profiles-count — lightweight count of candidate profiles
+export async function countProfiles(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const count = await CandidateProfile.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/jobs — active jobs, paginated for authenticated users
 // Public (no page param) → returns all; with ?page=1&limit=25 → paginated envelope
 export async function listJobs(
@@ -774,9 +802,7 @@ export async function vendorCandidates(
     // ── Location-based filtering: only show candidates whose profileCountry matches job country ──
     // Collect the set of countries from the vendor's active jobs being queried
     const jobCountries = new Set(
-      jobs
-        .map((j: any) => j.jobCountry || "")
-        .filter(Boolean),
+      jobs.map((j: any) => j.jobCountry || "").filter(Boolean),
     );
 
     // Filter candidates by location: candidate's profileCountry must match at least one job's country
