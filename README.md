@@ -52,6 +52,9 @@ matchdb-jobs-services/
 │       └── ws-public-data.service.ts # WebSocket /ws/public-data — live data snapshots with diffs
 ├── seed.ts                   # Create demo jobs, profiles (with resumes), applications
 ├── seed-10k.ts               # Mass seeder — 10K jobs, 10K profiles, ~5K applications
+├── seed-from-apis.ts         # Seed from external API sources
+├── seed-mass.ts              # Alternative mass seeder
+├── Dockerfile                # Production container image
 ├── env/
 │   └── .env.development      # Local env vars
 ├── package.json
