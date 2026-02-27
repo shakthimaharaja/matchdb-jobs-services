@@ -82,7 +82,7 @@ matchdb-jobs-services/
 | GET    | `/api/jobs/pokes/received`            | Yes       | Get pokes received by current user  |
 | GET    | `/api/jobs/resume/:username`          | No        | Public profile by username          |
 | GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume           |
-| GET    | `/api/jobs/:id`                       | Yes       | Get job details                     |
+| GET    | `/api/jobs/:id`                       | No        | Get job details                     |
 | POST   | `/api/jobs/:id/apply`                 | Candidate | Apply to a job                      |
 | PATCH  | `/api/jobs/:id/close`                 | Vendor    | Close/deactivate a job              |
 | PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                 |
@@ -117,6 +117,11 @@ The HTTP server routes WebSocket `upgrade` requests by pathname to the appropria
 
 Rate-limits poke interactions per user per month:
 `userId`, `yearMonth` (YYYY-MM format), `count` — unique compound index on `(userId, yearMonth)`
+
+### PokeRecord
+
+Tracks individual poke interactions between users:
+`fromUserId`, `toUserId`, `fromUserType`, `toUserType`, `jobId?`, `message?`, `createdAt`
 
 ---
 
