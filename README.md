@@ -62,38 +62,38 @@ matchdb-jobs-services/
 
 ## API Endpoints
 
-| Method | Path                                  | Auth      | Description                               |
-| ------ | ------------------------------------- | --------- | ----------------------------------------- |
-| GET    | `/api/jobs/`                          | No        | List all active jobs                      |
-| GET    | `/api/jobs/count`                     | No        | Get total job count                       |
-| GET    | `/api/jobs/profiles-count`            | No        | Get total profile count                   |
-| GET    | `/api/jobs/profiles-public`           | No        | List publicly visible profiles            |
-| POST   | `/api/jobs/create`                    | Vendor    | Create a new job                          |
-| GET    | `/api/jobs/vendor`                    | Vendor    | Get vendor's own jobs                     |
-| GET    | `/api/jobs/profilematches`            | Vendor    | Ranked candidate matches for vendor       |
-| GET    | `/api/jobs/profile`                   | Yes       | Get own candidate profile                 |
-| POST   | `/api/jobs/profile`                   | Candidate | Create own profile                        |
-| PUT    | `/api/jobs/profile`                   | Candidate | Update own profile                        |
-| DELETE | `/api/jobs/profile`                   | Candidate | Delete own profile                        |
-| GET    | `/api/jobs/my-applications`           | Candidate | Get own applications                      |
-| GET    | `/api/jobs/jobmatches`                | Candidate | Ranked job matches for candidate          |
-| POST   | `/api/jobs/poke`                      | Yes       | Send a poke notification                  |
-| GET    | `/api/jobs/pokes/sent`                | Yes       | Get pokes sent by current user            |
-| GET    | `/api/jobs/pokes/received`            | Yes       | Get pokes received by current user        |
-| GET    | `/api/jobs/resume/:username`          | No        | Public profile by username                |
-| GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume                 |
-| GET    | `/api/jobs/:id`                       | Yes       | Get job details                           |
-| POST   | `/api/jobs/:id/apply`                 | Candidate | Apply to a job                            |
-| PATCH  | `/api/jobs/:id/close`                 | Vendor    | Close/deactivate a job                    |
-| PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                       |
-| GET    | `/health`                             | No        | Health check                              |
+| Method | Path                                  | Auth      | Description                         |
+| ------ | ------------------------------------- | --------- | ----------------------------------- |
+| GET    | `/api/jobs/`                          | No        | List all active jobs                |
+| GET    | `/api/jobs/count`                     | No        | Get total job count                 |
+| GET    | `/api/jobs/profiles-count`            | No        | Get total profile count             |
+| GET    | `/api/jobs/profiles-public`           | No        | List publicly visible profiles      |
+| POST   | `/api/jobs/create`                    | Vendor    | Create a new job                    |
+| GET    | `/api/jobs/vendor`                    | Vendor    | Get vendor's own jobs               |
+| GET    | `/api/jobs/profilematches`            | Vendor    | Ranked candidate matches for vendor |
+| GET    | `/api/jobs/profile`                   | Yes       | Get own candidate profile           |
+| POST   | `/api/jobs/profile`                   | Candidate | Create own profile                  |
+| PUT    | `/api/jobs/profile`                   | Candidate | Update own profile                  |
+| DELETE | `/api/jobs/profile`                   | Candidate | Delete own profile                  |
+| GET    | `/api/jobs/my-applications`           | Candidate | Get own applications                |
+| GET    | `/api/jobs/jobmatches`                | Candidate | Ranked job matches for candidate    |
+| POST   | `/api/jobs/poke`                      | Yes       | Send a poke notification            |
+| GET    | `/api/jobs/pokes/sent`                | Yes       | Get pokes sent by current user      |
+| GET    | `/api/jobs/pokes/received`            | Yes       | Get pokes received by current user  |
+| GET    | `/api/jobs/resume/:username`          | No        | Public profile by username          |
+| GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume           |
+| GET    | `/api/jobs/:id`                       | Yes       | Get job details                     |
+| POST   | `/api/jobs/:id/apply`                 | Candidate | Apply to a job                      |
+| PATCH  | `/api/jobs/:id/close`                 | Vendor    | Close/deactivate a job              |
+| PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                 |
+| GET    | `/health`                             | No        | Health check                        |
 
 ### WebSocket Endpoints
 
 | Path              | Description                                                                              |
 | ----------------- | ---------------------------------------------------------------------------------------- |
 | `/ws/counts`      | Broadcasts `{ jobs, profiles }` counts every 30 s with jitter simulation                 |
-| `/ws/public-data` | Broadcasts full job + profile snapshots every 30 s with diff tracking (changed, deleted)  |
+| `/ws/public-data` | Broadcasts full job + profile snapshots every 30 s with diff tracking (changed, deleted) |
 
 The HTTP server routes WebSocket `upgrade` requests by pathname to the appropriate `ws.Server` instance (`noServer` mode).
 
