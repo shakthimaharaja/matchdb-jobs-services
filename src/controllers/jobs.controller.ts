@@ -721,7 +721,7 @@ export async function candidateMatches(
     const allowedTypes = typesParam
       ? typesParam.split(",").map((t: string) => t.trim())
       : null;
-    const matched = allowedTypes
+    let matched = allowedTypes
       ? locationFiltered.filter((m: any) => {
           const obj = typeof m.toObject === "function" ? m.toObject() : m;
           const jt = obj.jobType || obj.job_type || "";
@@ -729,25 +729,69 @@ export async function candidateMatches(
         })
       : locationFiltered;
 
+    // ── Aggregate type/subtype counts from the type-filtered set ──
+    // (before filter_type/sub_type/work_mode/search so sidebar counts stay accurate)
+    const typeFilteredSet = matched;
+    const typeCounts: Record<string, number> = {};
+    const subTypeCounts: Record<string, Record<string, number>> = {};
+    for (const m of typeFilteredSet) {
+      const obj = typeof m.toObject === "function" ? m.toObject() : m;
+      const jt = obj.jobType || obj.job_type || "other";
+      typeCounts[jt] = (typeCounts[jt] || 0) + 1;
+      const jst = obj.jobSubType || obj.job_sub_type || "";
+      if (jst) {
+        if (!subTypeCounts[jt]) subTypeCounts[jt] = {};
+        subTypeCounts[jt][jst] = (subTypeCounts[jt][jst] || 0) + 1;
+      }
+    }
+
+    // ── Additional server-side filters ──
+
+    // filter_type narrows to a single job type (e.g. "contract")
+    const filterTypeParam = req.query.filter_type as string | undefined;
+    if (filterTypeParam) {
+      matched = matched.filter((m: any) => {
+        const obj = typeof m.toObject === "function" ? m.toObject() : m;
+        const jt = obj.jobType || obj.job_type || "";
+        return jt === filterTypeParam;
+      });
+    }
+
+    const subTypeParam = req.query.sub_type as string | undefined;
+    if (subTypeParam) {
+      matched = matched.filter((m: any) => {
+        const obj = typeof m.toObject === "function" ? m.toObject() : m;
+        const jst = obj.jobSubType || obj.job_sub_type || "";
+        return jst === subTypeParam;
+      });
+    }
+
+    const workModeParam = req.query.work_mode as string | undefined;
+    if (workModeParam) {
+      matched = matched.filter((m: any) => {
+        const obj = typeof m.toObject === "function" ? m.toObject() : m;
+        const wm = obj.workMode || obj.work_mode || "";
+        return wm === workModeParam;
+      });
+    }
+
+    const searchParam = req.query.search as string | undefined;
+    if (searchParam) {
+      const q = searchParam.trim().toLowerCase();
+      matched = matched.filter((m: any) => {
+        const obj = typeof m.toObject === "function" ? m.toObject() : m;
+        const title = (obj.title || "").toLowerCase();
+        const loc = (obj.location || "").toLowerCase();
+        const email = (obj.vendorEmail || obj.vendor_email || "").toLowerCase();
+        return title.includes(q) || loc.includes(q) || email.includes(q);
+      });
+    }
+
     const wantPaginated = req.query.page !== undefined;
     if (wantPaginated) {
       const { page, limit, skip } = parsePagination(req.query);
       const total = matched.length;
       const sliced = matched.slice(skip, skip + limit);
-
-      // Aggregate type/subtype counts from the FULL matched set
-      const typeCounts: Record<string, number> = {};
-      const subTypeCounts: Record<string, Record<string, number>> = {};
-      for (const m of matched) {
-        const obj = typeof m.toObject === "function" ? m.toObject() : m;
-        const jt = obj.jobType || obj.job_type || "other";
-        typeCounts[jt] = (typeCounts[jt] || 0) + 1;
-        const jst = obj.jobSubType || obj.job_sub_type || "";
-        if (jst) {
-          if (!subTypeCounts[jt]) subTypeCounts[jt] = {};
-          subTypeCounts[jt][jst] = (subTypeCounts[jt][jst] || 0) + 1;
-        }
-      }
 
       res.json({
         data: sliced.map((m: any) => {

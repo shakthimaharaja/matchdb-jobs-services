@@ -1,9 +1,7 @@
-import { Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { Job } from "../models/Job.model";
 import { CandidateProfile } from "../models/CandidateProfile.model";
 
-let wss: WebSocketServer | null = null;
 let prevJobCount = -1;
 let prevProfileCount = -1;
 
@@ -14,53 +12,61 @@ function jitter(): number {
   return d;
 }
 
-/**
- * Attaches a WebSocket server to the existing HTTP server.
- * Broadcasts { jobs: number, profiles: number } to every connected client
- * every 30 seconds. If the real count hasn't changed since last broadcast,
- * a small random delta is applied so the UI feels alive.
- */
-export function initCountsWebSocket(server: HttpServer): void {
-  wss = new WebSocketServer({ server, path: "/ws/counts" });
+async function fetchCounts(): Promise<{ jobs: number; profiles: number }> {
+  const [realJobs, realProfiles] = await Promise.all([
+    Job.countDocuments({ isActive: true }),
+    CandidateProfile.countDocuments(),
+  ]);
 
-  console.log("[WS] Counts WebSocket listening on /ws/counts");
+  let displayJobs = realJobs;
+  let displayProfiles = realProfiles;
+
+  if (realJobs === prevJobCount) {
+    displayJobs = Math.max(1, realJobs + jitter());
+  }
+  if (realProfiles === prevProfileCount) {
+    displayProfiles = Math.max(1, realProfiles + jitter());
+  }
+
+  prevJobCount = realJobs;
+  prevProfileCount = realProfiles;
+
+  return { jobs: displayJobs, profiles: displayProfiles };
+}
+
+/**
+ * Creates a WebSocketServer in noServer mode (caller routes upgrades).
+ * Broadcasts { jobs, profiles } counts every 30 s.
+ * Sends an immediate snapshot on new connections.
+ */
+export function createCountsWebSocket(): WebSocketServer {
+  const wss = new WebSocketServer({ noServer: true });
+
+  console.log("[WS] Counts WebSocket ready (noServer) — /ws/counts");
+
+  // Send counts immediately on new connection
+  wss.on("connection", async (ws: WebSocket) => {
+    try {
+      const counts = await fetchCounts();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(counts));
+      }
+    } catch { /* ignore */ }
+  });
 
   // Broadcast loop — every 30 seconds
   setInterval(async () => {
-    if (!wss || wss.clients.size === 0) return;
-
+    if (wss.clients.size === 0) return;
     try {
-      const [realJobs, realProfiles] = await Promise.all([
-        Job.countDocuments({ isActive: true }),
-        CandidateProfile.countDocuments(),
-      ]);
-
-      // If count unchanged, nudge it randomly so the UI feels real-time
-      let displayJobs = realJobs;
-      let displayProfiles = realProfiles;
-
-      if (realJobs === prevJobCount) {
-        displayJobs = Math.max(1, realJobs + jitter());
-      }
-      if (realProfiles === prevProfileCount) {
-        displayProfiles = Math.max(1, realProfiles + jitter());
-      }
-
-      prevJobCount = realJobs;
-      prevProfileCount = realProfiles;
-
-      const payload = JSON.stringify({
-        jobs: displayJobs,
-        profiles: displayProfiles,
-      });
-
+      const counts = await fetchCounts();
+      const payload = JSON.stringify(counts);
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(payload);
         }
       });
-    } catch {
-      // silently skip on DB errors
-    }
-  }, 30000);
+    } catch { /* silently skip */ }
+  }, 30_000);
+
+  return wss;
 }

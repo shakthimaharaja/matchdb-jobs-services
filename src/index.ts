@@ -1,14 +1,36 @@
 import { createServer } from "http";
+import { parse } from "url";
 import { env } from "./config/env";
 import { connectMongo } from "./config/mongoose";
 import app from "./app";
-import { initCountsWebSocket } from "./services/ws-counts.service";
+import { createCountsWebSocket } from "./services/ws-counts.service";
+import { createPublicDataWebSocket } from "./services/ws-public-data.service";
 
 async function main() {
   await connectMongo();
 
   const server = createServer(app);
-  initCountsWebSocket(server);
+
+  // Create WebSocket servers in noServer mode
+  const countsWss = createCountsWebSocket();
+  const publicDataWss = createPublicDataWebSocket();
+
+  // Route HTTP upgrade requests to the correct WSS by pathname
+  server.on("upgrade", (req, socket, head) => {
+    const { pathname } = parse(req.url || "");
+
+    if (pathname === "/ws/counts") {
+      countsWss.handleUpgrade(req, socket, head, (ws) => {
+        countsWss.emit("connection", ws, req);
+      });
+    } else if (pathname === "/ws/public-data") {
+      publicDataWss.handleUpgrade(req, socket, head, (ws) => {
+        publicDataWss.emit("connection", ws, req);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
 
   server.listen(env.PORT, () => {
     console.log(

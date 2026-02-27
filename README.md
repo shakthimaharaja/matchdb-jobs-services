@@ -15,7 +15,8 @@ Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchD
 | Email      | SendGrid                                           |
 | Matching   | Skill-based scoring engine + skill extraction      |
 | Validation | Zod                                                |
-| Security   | Helmet, CORS                                       |
+| Security   | Helmet, CORS, compression                          |
+| Realtime   | WebSocket (ws) — live counts & public data feeds   |
 
 ---
 
@@ -24,14 +25,14 @@ Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchD
 ```
 matchdb-jobs-services/
 ├── src/
-│   ├── index.ts              # Entry point — connects MongoDB, starts server
+│   ├── index.ts              # Entry point — HTTP server + WebSocket upgrade routing
 │   ├── app.ts                # Express app (routes, middleware, Swagger)
 │   ├── config/
 │   │   ├── env.ts            # Environment variable loading & validation
 │   │   ├── mongoose.ts       # MongoDB connection helper
 │   │   └── swagger.ts        # OpenAPI 3.0 spec (all endpoints)
 │   ├── controllers/
-│   │   └── jobs.controller.ts     # CRUD for jobs, profiles, applications, matching, resume
+│   │   └── jobs.controller.ts     # CRUD for jobs, profiles, applications, matching, resume, pokes
 │   ├── middleware/
 │   │   ├── auth.middleware.ts     # JWT verification guard (reads username from token)
 │   │   └── error.middleware.ts    # Global error handler + 404
@@ -46,8 +47,11 @@ matchdb-jobs-services/
 │   └── services/
 │       ├── matching.service.ts       # Candidate-job matching algorithm
 │       ├── skill-extractor.service.ts # Auto-extract skills from text (~150 keywords)
-│       └── sendgrid.service.ts       # Email dispatch
+│       ├── sendgrid.service.ts       # Email dispatch
+│       ├── ws-counts.service.ts      # WebSocket /ws/counts — live job & profile counts
+│       └── ws-public-data.service.ts # WebSocket /ws/public-data — live data snapshots with diffs
 ├── seed.ts                   # Create demo jobs, profiles (with resumes), applications
+├── seed-10k.ts               # Mass seeder — 10K jobs, 10K profiles, ~5K applications
 ├── env/
 │   └── .env.development      # Local env vars
 ├── package.json
@@ -58,31 +62,40 @@ matchdb-jobs-services/
 
 ## API Endpoints
 
-| Method | Path                                  | Auth      | Description                         |
-| ------ | ------------------------------------- | --------- | ----------------------------------- |
-| GET    | `/api/jobs/`                          | No        | List all active jobs                |
-| POST   | `/api/jobs/`                          | Vendor    | Create a new job                    |
-| GET    | `/api/jobs/:id`                       | Yes       | Get job details                     |
-| PUT    | `/api/jobs/:id`                       | Vendor    | Update a job (owner only)           |
-| DELETE | `/api/jobs/:id`                       | Vendor    | Delete a job (owner only)           |
-| PATCH  | `/api/jobs/:id/close`                 | Vendor    | Close/deactivate a job              |
-| PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                 |
-| GET    | `/api/jobs/vendor/mine`               | Vendor    | Get vendor's own jobs               |
-| GET    | `/api/jobs/profiles/`                 | Yes       | List candidate profiles             |
-| GET    | `/api/jobs/profiles-public`           | No        | List publicly visible profiles      |
-| POST   | `/api/jobs/profiles/`                 | Candidate | Create / update own profile         |
-| GET    | `/api/jobs/profiles/me`               | Candidate | Get own candidate profile           |
-| POST   | `/api/jobs/applications/`             | Candidate | Apply to a job                      |
-| GET    | `/api/jobs/applications/mine`         | Candidate | Get own applications                |
-| GET    | `/api/jobs/applications/job/:id`      | Vendor    | Get applications for a job          |
-| PATCH  | `/api/jobs/applications/:id/status`   | Vendor    | Update application status           |
-| GET    | `/api/jobs/match/:jobId`              | Vendor    | Match candidates to a job           |
-| GET    | `/api/jobs/jobmatches`                | Candidate | Ranked job matches for candidate    |
-| GET    | `/api/jobs/profilematches`            | Vendor    | Ranked candidate matches for vendor |
-| POST   | `/api/jobs/poke`                      | Yes       | Send a poke notification            |
-| GET    | `/api/jobs/resume/:username`          | No        | Public profile by username          |
-| GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume           |
-| GET    | `/health`                             | No        | Health check                        |
+| Method | Path                                  | Auth      | Description                               |
+| ------ | ------------------------------------- | --------- | ----------------------------------------- |
+| GET    | `/api/jobs/`                          | No        | List all active jobs                      |
+| GET    | `/api/jobs/count`                     | No        | Get total job count                       |
+| GET    | `/api/jobs/profiles-count`            | No        | Get total profile count                   |
+| GET    | `/api/jobs/profiles-public`           | No        | List publicly visible profiles            |
+| POST   | `/api/jobs/create`                    | Vendor    | Create a new job                          |
+| GET    | `/api/jobs/vendor`                    | Vendor    | Get vendor's own jobs                     |
+| GET    | `/api/jobs/profilematches`            | Vendor    | Ranked candidate matches for vendor       |
+| GET    | `/api/jobs/profile`                   | Yes       | Get own candidate profile                 |
+| POST   | `/api/jobs/profile`                   | Candidate | Create own profile                        |
+| PUT    | `/api/jobs/profile`                   | Candidate | Update own profile                        |
+| DELETE | `/api/jobs/profile`                   | Candidate | Delete own profile                        |
+| GET    | `/api/jobs/my-applications`           | Candidate | Get own applications                      |
+| GET    | `/api/jobs/jobmatches`                | Candidate | Ranked job matches for candidate          |
+| POST   | `/api/jobs/poke`                      | Yes       | Send a poke notification                  |
+| GET    | `/api/jobs/pokes/sent`                | Yes       | Get pokes sent by current user            |
+| GET    | `/api/jobs/pokes/received`            | Yes       | Get pokes received by current user        |
+| GET    | `/api/jobs/resume/:username`          | No        | Public profile by username                |
+| GET    | `/api/jobs/resume/:username/download` | Yes       | Download candidate resume                 |
+| GET    | `/api/jobs/:id`                       | Yes       | Get job details                           |
+| POST   | `/api/jobs/:id/apply`                 | Candidate | Apply to a job                            |
+| PATCH  | `/api/jobs/:id/close`                 | Vendor    | Close/deactivate a job                    |
+| PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                       |
+| GET    | `/health`                             | No        | Health check                              |
+
+### WebSocket Endpoints
+
+| Path              | Description                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `/ws/counts`      | Broadcasts `{ jobs, profiles }` counts every 30 s with jitter simulation                 |
+| `/ws/public-data` | Broadcasts full job + profile snapshots every 30 s with diff tracking (changed, deleted)  |
+
+The HTTP server routes WebSocket `upgrade` requests by pathname to the appropriate `ws.Server` instance (`noServer` mode).
 
 ---
 
@@ -115,7 +128,9 @@ The `skill-extractor.service.ts` auto-extracts skills from free-form text (resum
 
 ## Seed Data
 
-Creates 19 jobs, 10 candidate profiles (with full resume data), and 25 applications. Profile IDs are synced with shell-services seed users. Each candidate profile includes `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, and `visibilityConfig`.
+The default `seed.ts` creates 19 jobs, 10 candidate profiles (with full resume data), and 25 applications. Profile IDs are synced with shell-services seed users. Each candidate profile includes `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, and `visibilityConfig`.
+
+For load testing, `seed-10k.ts` creates 10,000 jobs + 10,000 profiles + ~5,000 applications + ~2,000 poke records using batched `insertMany` (1,000 per batch).
 
 ---
 
