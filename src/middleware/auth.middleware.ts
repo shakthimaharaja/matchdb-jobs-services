@@ -5,7 +5,7 @@ import { env } from '../config/env';
 export interface JwtUser {
   userId: string;
   email: string;
-  userType: 'candidate' | 'vendor' | 'admin';
+  userType: 'candidate' | 'vendor' | 'admin' | 'marketer';
   plan: string;
   username: string;
 }
@@ -48,6 +48,16 @@ export function requireCandidate(req: Request, res: Response, next: NextFunction
   requireAuth(req, res, () => {
     if (req.user?.userType !== 'candidate') {
       res.status(403).json({ error: 'Candidate access required' });
+      return;
+    }
+    next();
+  });
+}
+
+export function requireMarketer(req: Request, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (req.user?.userType !== 'marketer') {
+      res.status(403).json({ error: 'Marketer access required' });
       return;
     }
     next();

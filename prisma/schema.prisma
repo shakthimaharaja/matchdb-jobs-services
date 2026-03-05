@@ -1,0 +1,181 @@
+// jobs-services: generate-only schema (never runs prisma migrate)
+// shell-services owns all migrations.
+// Run: npx prisma generate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id                 String        @id @default(uuid())
+  vendorId           String
+  vendorEmail        String
+  recruiterName      String        @default("")
+  recruiterPhone     String        @default("")
+  title              String
+  description        String        @default("")
+  location           String        @default("")
+  jobCountry         String        @default("")
+  jobState           String        @default("")
+  jobCity            String        @default("")
+  jobType            String
+  jobSubType         String        @default("")
+  workMode           String        @default("")
+  salaryMin          Decimal?
+  salaryMax          Decimal?
+  payPerHour         Decimal?
+  skillsRequired     String[]
+  experienceRequired Int           @default(0)
+  applicationCount   Int           @default(0)
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  applications       Application[]
+
+  @@index([vendorId, createdAt(sort: Desc)])
+  @@index([isActive, createdAt(sort: Desc)])
+  @@map("jobs")
+}
+
+model CandidateProfile {
+  id                 String   @id @default(uuid())
+  candidateId        String   @unique
+  username           String   @default("")
+  name               String   @default("")
+  email              String   @default("")
+  phone              String   @default("")
+  currentCompany     String   @default("")
+  currentRole        String   @default("")
+  preferredJobType   String   @default("")
+  expectedHourlyRate Decimal?
+  experienceYears    Int      @default(0)
+  skills             String[]
+  location           String   @default("")
+  profileCountry     String   @default("")
+  bio                String   @default("")
+  resumeSummary      String   @default("")
+  resumeExperience   String   @default("")
+  resumeEducation    String   @default("")
+  resumeAchievements String   @default("")
+  visibilityConfig   Json?
+  profileLocked      Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([createdAt(sort: Desc)])
+  @@map("candidate_profiles")
+}
+
+model Application {
+  id             String   @id @default(uuid())
+  jobId          String
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobTitle       String   @default("")
+  candidateId    String
+  candidateEmail String
+  coverLetter    String   @default("")
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([jobId, candidateId])
+  @@index([candidateId])
+  @@map("applications")
+}
+
+model PokeRecord {
+  id             String   @id @default(uuid())
+  senderId       String
+  senderName     String   @default("")
+  senderEmail    String   @default("")
+  senderType     String
+  targetId       String
+  targetVendorId String?
+  targetEmail    String
+  targetName     String   @default("")
+  subject        String   @default("")
+  isEmail        Boolean  @default(false)
+  jobId          String?
+  jobTitle       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([senderId, targetId, isEmail])
+  @@index([senderId])
+  @@index([targetId])
+  @@map("poke_records")
+}
+
+model PokeLog {
+  id        String   @id @default(uuid())
+  userId    String
+  yearMonth String
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, yearMonth])
+  @@map("poke_logs")
+}
+
+model Company {
+  id                 String              @id @default(uuid())
+  name               String
+  marketerId         String              @unique
+  marketerEmail      String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  marketerCandidates MarketerCandidate[]
+
+  @@index([name])
+  @@map("companies")
+}
+
+model MarketerCandidate {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  marketerId     String
+  candidateId    String   @default("")
+  candidateName  String   @default("")
+  candidateEmail String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, candidateEmail])
+  @@index([marketerId])
+  @@map("marketer_candidates")
+}
+
+model ForwardedOpening {
+  id             String   @id @default(uuid())
+  marketerId     String
+  marketerEmail  String   @default("")
+  companyId      String
+  companyName    String   @default("")
+  candidateEmail String
+  candidateName  String   @default("")
+  jobId          String
+  jobTitle       String   @default("")
+  jobLocation    String   @default("")
+  jobType        String   @default("")
+  jobSubType     String   @default("")
+  vendorEmail    String   @default("")
+  skillsRequired String[]
+  payPerHour     Decimal?
+  salaryMin      Decimal?
+  salaryMax      Decimal?
+  note           String   @default("")
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([marketerId, candidateEmail, jobId])
+  @@index([candidateEmail, createdAt(sort: Desc)])
+  @@map("forwarded_openings")
+}

@@ -14,8 +14,7 @@ function required(key: string): string {
 export const env = {
   NODE_ENV: ENV,
   PORT: parseInt(process.env.PORT || "8001", 10),
-  MONGO_URI: required("MONGO_URI"),
-  MONGO_DB_NAME: process.env.MONGO_DB_NAME || "matchdb_jobs",
+  DATABASE_URL: required("DATABASE_URL"),
   JWT_SECRET: required("JWT_SECRET"),
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || "",
   SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL || "noreply@matchdb.io",

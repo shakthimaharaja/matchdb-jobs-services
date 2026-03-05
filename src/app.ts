@@ -5,8 +5,14 @@ import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import jobsRoutes from "./routes/jobs.routes";
+import marketerRoutes from "./routes/marketer.routes";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
+import { requireCandidate } from "./middleware/auth.middleware";
+import {
+  listCompanies,
+  getCandidateForwardedOpenings,
+} from "./controllers/marketer.controller";
 
 const app = express();
 
@@ -25,6 +31,17 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Public: list all companies (for candidate/vendor registration dropdowns)
+app.get("/api/jobs/companies", listCompanies);
+
+// Candidate: forwarded openings from their marketing company
+app.get(
+  "/api/jobs/candidate/forwarded",
+  requireCandidate,
+  getCandidateForwardedOpenings,
+);
+
+app.use("/api/jobs/marketer", marketerRoutes); // must be BEFORE /api/jobs to avoid :id collision
 app.use("/api/jobs", jobsRoutes);
 
 app.get("/health", (_req, res) => {

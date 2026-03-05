@@ -1,6 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { Job } from "../models/Job.model";
-import { CandidateProfile } from "../models/CandidateProfile.model";
+import { prisma } from "../config/prisma";
 
 let prevJobCount = -1;
 let prevProfileCount = -1;
@@ -14,8 +13,8 @@ function jitter(): number {
 
 async function fetchCounts(): Promise<{ jobs: number; profiles: number }> {
   const [realJobs, realProfiles] = await Promise.all([
-    Job.countDocuments({ isActive: true }),
-    CandidateProfile.countDocuments(),
+    prisma.job.count({ where: { isActive: true } }),
+    prisma.candidateProfile.count(),
   ]);
 
   let displayJobs = realJobs;

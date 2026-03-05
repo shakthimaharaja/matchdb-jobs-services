@@ -1,6 +1,6 @@
 # matchdb-jobs-services
 
-Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchDB staffing platform.
+Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for the MatchDB staffing platform. Uses the **same PostgreSQL database** as shell-services (generate-only — no migrations).
 
 ---
 
@@ -10,7 +10,7 @@ Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchD
 | ---------- | -------------------------------------------------- |
 | Runtime    | Node.js + TypeScript                               |
 | Framework  | Express 4                                          |
-| Database   | MongoDB via Mongoose 8                             |
+| Database   | PostgreSQL via Prisma 5 (generate-only, shared DB) |
 | Auth       | JWT verification (tokens issued by shell-services) |
 | Email      | SendGrid                                           |
 | Matching   | Skill-based scoring engine + skill extraction      |
@@ -24,39 +24,33 @@ Jobs, Candidate Profiles, Applications, Matching & Resume backend for the MatchD
 
 ```
 matchdb-jobs-services/
+├── prisma/
+│   └── schema.prisma          # Generate-only schema (8 job models — no migrations)
 ├── src/
-│   ├── index.ts              # Entry point — HTTP server + WebSocket upgrade routing
-│   ├── app.ts                # Express app (routes, middleware, Swagger)
+│   ├── index.ts               # Entry point — HTTP server + WebSocket upgrade routing
+│   ├── app.ts                 # Express app (routes, middleware, Swagger)
 │   ├── config/
-│   │   ├── env.ts            # Environment variable loading & validation
-│   │   ├── mongoose.ts       # MongoDB connection helper
-│   │   └── swagger.ts        # OpenAPI 3.0 spec (all endpoints)
+│   │   ├── env.ts             # Environment variable loading & validation
+│   │   ├── prisma.ts          # Prisma client singleton
+│   │   └── swagger.ts         # OpenAPI 3.0 spec (all endpoints)
 │   ├── controllers/
-│   │   └── jobs.controller.ts     # CRUD for jobs, profiles, applications, matching, resume, pokes
+│   │   ├── jobs.controller.ts      # CRUD for jobs, profiles, applications, matching, pokes
+│   │   └── marketer.controller.ts  # Company, roster, forwarding
 │   ├── middleware/
-│   │   ├── auth.middleware.ts     # JWT verification guard (reads username from token)
-│   │   └── error.middleware.ts    # Global error handler + 404
-│   ├── models/
-│   │   ├── Job.model.ts              # Job posting schema
-│   │   ├── CandidateProfile.model.ts # Candidate profile + resume schema
-│   │   ├── Application.model.ts      # Job application schema
-│   │   ├── PokeLog.model.ts          # Monthly poke rate-limit tracking
-│   │   └── PokeRecord.model.ts       # Poke interaction records
+│   │   ├── auth.middleware.ts      # JWT verification guard (reads username from token)
+│   │   └── error.middleware.ts     # Global error handler + 404
 │   ├── routes/
-│   │   └── jobs.routes.ts        # /api/jobs/*
+│   │   ├── jobs.routes.ts         # /api/jobs/*
+│   │   └── marketer.routes.ts     # /api/marketer/*
 │   └── services/
 │       ├── matching.service.ts       # Candidate-job matching algorithm
 │       ├── skill-extractor.service.ts # Auto-extract skills from text (~150 keywords)
 │       ├── sendgrid.service.ts       # Email dispatch
 │       ├── ws-counts.service.ts      # WebSocket /ws/counts — live job & profile counts
-│       └── ws-public-data.service.ts # WebSocket /ws/public-data — live data snapshots with diffs
-├── seed.ts                   # Create demo jobs, profiles (with resumes), applications
-├── seed-10k.ts               # Mass seeder — 10K jobs, 10K profiles, ~5K applications
-├── seed-from-apis.ts         # Seed from external API sources
-├── seed-mass.ts              # Alternative mass seeder
-├── Dockerfile                # Production container image
+│       └── ws-public-data.service.ts # WebSocket /ws/public-data — live data with diffs
+├── Dockerfile
 ├── env/
-│   └── .env.development      # Local env vars
+│   └── .env.local             # Local env vars
 ├── package.json
 └── tsconfig.json
 ```
@@ -64,6 +58,8 @@ matchdb-jobs-services/
 ---
 
 ## API Endpoints
+
+### Jobs
 
 | Method | Path                                  | Auth      | Description                         |
 | ------ | ------------------------------------- | --------- | ----------------------------------- |
@@ -91,6 +87,21 @@ matchdb-jobs-services/
 | PATCH  | `/api/jobs/:id/reopen`                | Vendor    | Reopen a closed job                 |
 | GET    | `/health`                             | No        | Health check                        |
 
+### Marketer
+
+| Method | Path                           | Auth     | Description                  |
+| ------ | ------------------------------ | -------- | ---------------------------- |
+| GET    | `/api/marketer/stats`          | Marketer | Dashboard stats              |
+| GET    | `/api/marketer/jobs`           | Marketer | Browse available jobs        |
+| GET    | `/api/marketer/profiles`       | Marketer | Browse candidate profiles    |
+| POST   | `/api/marketer/company`        | Marketer | Register a company           |
+| GET    | `/api/marketer/company`        | Marketer | Get own company              |
+| POST   | `/api/marketer/candidates`     | Marketer | Add candidate to roster      |
+| GET    | `/api/marketer/candidates`     | Marketer | List rostered candidates     |
+| DELETE | `/api/marketer/candidates/:id` | Marketer | Remove candidate from roster |
+| POST   | `/api/marketer/forward`        | Marketer | Forward a job to a candidate |
+| GET    | `/api/marketer/forwarded`      | Marketer | List forwarded openings      |
+
 ### WebSocket Endpoints
 
 | Path              | Description                                                                              |
@@ -98,19 +109,17 @@ matchdb-jobs-services/
 | `/ws/counts`      | Broadcasts `{ jobs, profiles }` counts every 30 s with jitter simulation                 |
 | `/ws/public-data` | Broadcasts full job + profile snapshots every 30 s with diff tracking (changed, deleted) |
 
-The HTTP server routes WebSocket `upgrade` requests by pathname to the appropriate `ws.Server` instance (`noServer` mode).
-
 ---
 
-## Data Models
+## Data Models (Prisma)
 
 ### Job
 
-`title`, `description`, `vendorId`, `vendorEmail`, `recruiterName`, `recruiterPhone`, `location`, `jobType` (full_time / contract), `subType` (c2c / c2h / w2 / 1099 / direct_hire / salary), `salaryMin`, `salaryMax`, `payPerHour`, `skillsRequired[]`, `experienceRequired`, `workMode` (onsite / remote / hybrid), `isActive`
+`title`, `description`, `vendorId`, `vendorEmail`, `recruiterName`, `recruiterPhone`, `location`, `jobCountry`, `jobState`, `jobCity`, `jobType` (full_time / contract), `jobSubType` (c2c / c2h / w2 / 1099 / direct_hire / salary), `salaryMin`, `salaryMax`, `payPerHour`, `skillsRequired[]`, `experienceRequired`, `workMode` (onsite / remote / hybrid), `isActive`
 
 ### CandidateProfile
 
-`candidateId`, `username`, `name`, `email`, `phone`, `currentCompany`, `currentRole`, `preferredJobType`, `expectedHourlyRate`, `experienceYears`, `skills[]`, `location`, `bio`, `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, `visibilityConfig` (domain→subdomain map), `profileLocked`
+`candidateId`, `username`, `name`, `email`, `phone`, `currentCompany`, `currentRole`, `preferredJobType`, `expectedHourlyRate`, `experienceYears`, `skills[]`, `location`, `profileCountry`, `bio`, `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, `visibilityConfig` (domain→subdomain map), `profileLocked`
 
 ### Application
 
@@ -123,22 +132,25 @@ Rate-limits poke interactions per user per month:
 
 ### PokeRecord
 
-Tracks individual poke interactions between users:
-`fromUserId`, `toUserId`, `fromUserType`, `toUserType`, `jobId?`, `message?`, `createdAt`
+Individual poke interactions: `fromUserId`, `toUserId`, `fromUserType`, `toUserType`, `jobId?`, `message?`
+
+### Company
+
+Marketer company: `name`, `marketerId`, `marketerEmail`
+
+### MarketerCandidate
+
+Roster entry: `companyId`, `marketerId`, `candidateId`, `candidateName`, `candidateEmail`
+
+### ForwardedOpening
+
+`marketerId`, `candidateId`, `candidateName`, `candidateEmail`, `jobId`, `jobTitle`, `vendorEmail`
 
 ---
 
 ## Skill Extraction
 
-The `skill-extractor.service.ts` auto-extracts skills from free-form text (resumes, job descriptions) using a curated list of ~150 keywords across: Languages, Frontend, Backend, Databases, Cloud/DevOps, Data/AI/ML, Tools, Mobile, Testing. Case-insensitive with word-boundary matching.
-
----
-
-## Seed Data
-
-The default `seed.ts` creates 19 jobs, 10 candidate profiles (with full resume data), and 25 applications. Profile IDs are synced with shell-services seed users. Each candidate profile includes `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, and `visibilityConfig`.
-
-For load testing, `seed-10k.ts` creates 10,000 jobs + 10,000 profiles + ~5,000 applications + ~2,000 poke records using batched `insertMany` (1,000 per batch).
+`skill-extractor.service.ts` auto-extracts skills from free-form text (resumes, job descriptions) using a curated list of ~150 keywords across: Languages, Frontend, Backend, Databases, Cloud/DevOps, Data/AI/ML, Tools, Mobile, Testing. Case-insensitive with word-boundary matching.
 
 ---
 
@@ -148,38 +160,35 @@ For load testing, `seed-10k.ts` creates 10,000 jobs + 10,000 profiles + ~5,000 a
 
 - **Node.js** ≥ 18
 - **npm** ≥ 9
-- **MongoDB** running locally on port 27017 (or a remote URI)
+- **PostgreSQL** running (same instance as shell-services)
+- **shell-services** must have run migrations first (`npx prisma migrate dev`)
 
 ### Environment Variables
 
-Create `env/.env.development`:
+Create `env/.env.local`:
 
 ```env
-MONGO_URI=mongodb://localhost:27017
-MONGO_DB_NAME=matchdb_jobs
-JWT_SECRET=dev-jwt-secret-change-in-production-min-32-chars
 PORT=8001
-
-# Optional
+NODE_ENV=local
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/matchdb
+JWT_SECRET=dev-jwt-secret-change-in-production-min-32-chars
 SENDGRID_API_KEY=
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:4000,http://localhost:4001
+CLIENT_URL=http://localhost:3000
 ```
 
-> **Note:** The `JWT_SECRET` must match the one used in `matchdb-shell-services` since tokens are issued there and verified here.
+> **Note:** `JWT_SECRET` must match the one used in `matchdb-shell-services` since tokens are issued there and verified here.
 
 ### Install & Run
 
-```bash
+```powershell
 # 1. Install dependencies
 npm install
 
-# 2. Make sure MongoDB is running
-mongosh --eval "db.adminCommand('ping')"
+# 2. Generate Prisma client (generate-only — never run migrate here)
+npx prisma generate
 
-# 3. Seed demo data (jobs, profiles, applications)
-npx tsx seed.ts
-
-# 4. Start the dev server (hot-reload)
+# 3. Start the dev server (hot-reload)
 npm run dev
 ```
 
@@ -195,9 +204,17 @@ The server starts on **http://localhost:8001**.
 | `npm run build` | Compile TypeScript to `dist/`     |
 | `npm start`     | Run compiled output               |
 
+---
+
 ## API Documentation (Swagger)
 
-Interactive API docs are available at **http://localhost:8001/api-docs** when the server is running. The OpenAPI 3.0 spec is defined inline in `src/config/swagger.ts` and covers all jobs, profiles, applications, matching, resume, and poke endpoints with request/response schemas.
+Interactive API docs at **http://localhost:8001/api-docs**. OpenAPI 3.0 spec defined in `src/config/swagger.ts`.
+
+---
+
+## License
+
+MIT
 
 ---
 
