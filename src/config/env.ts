@@ -23,4 +23,9 @@ export const env = {
     process.env.CORS_ORIGINS ||
     "http://localhost:3000,http://localhost:3001,http://localhost:4000,http://localhost:4001"
   ).split(","),
+  // Internal ingest API — shared secret with matchdb-data-collection-mono
+  INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || "matchdb-internal-dev-key",
+  // System "vendor" identity used for collection-uploaded job postings
+  SYSTEM_VENDOR_ID: process.env.SYSTEM_VENDOR_ID || "00000000-0000-0000-0000-000000000001",
+  SYSTEM_VENDOR_EMAIL: process.env.SYSTEM_VENDOR_EMAIL || "system@matchdb.io",
 };

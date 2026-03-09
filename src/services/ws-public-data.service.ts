@@ -221,6 +221,20 @@ function broadcast(payload: string): void {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+/**
+ * Trigger an immediate broadcast to all connected /ws/public-data clients.
+ * Called by the ingest controller after new jobs/profiles are written to DB.
+ */
+export async function triggerPublicDataBroadcast(): Promise<void> {
+  if (!wss || wss.clients.size === 0) return;
+  try {
+    const snapshot = await fetchSnapshot();
+    broadcast(JSON.stringify(snapshot));
+  } catch {
+    // silently skip on DB errors
+  }
+}
+
 export function createPublicDataWebSocket(): WebSocketServer {
   wss = new WebSocketServer({ noServer: true });
 
