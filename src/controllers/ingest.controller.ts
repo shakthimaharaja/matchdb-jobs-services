@@ -31,6 +31,7 @@ interface CollectionJob {
   recruiter_name?: string;
   recruiter_email?: string;
   recruiter_phone?: string;
+  uploaded_by?: string; // data-collection user who submitted the job
 }
 
 interface CollectionProfile {
@@ -69,6 +70,8 @@ function mapJobRecord(r: CollectionJob) {
     skillsRequired: Array.isArray(r.skills_required) ? r.skills_required : [],
     experienceRequired: r.experience_required ?? 0,
     isActive: true,
+    // Map the data-collection uploader for salary attribution
+    sourceUserId: r.uploaded_by ? String(r.uploaded_by) : null,
   };
 }
 

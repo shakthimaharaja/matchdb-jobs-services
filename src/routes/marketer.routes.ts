@@ -8,9 +8,13 @@ import {
   getMyCompany,
   addMarketerCandidate,
   getMarketerCandidates,
+  getMarketerCandidateDetail,
   removeMarketerCandidate,
   forwardOpening,
   getForwardedOpenings,
+  inviteCandidate,
+  forwardOpeningWithEmail,
+  updateForwardedStatus,
 } from "../controllers/marketer.controller";
 
 const router = Router();
@@ -27,10 +31,14 @@ router.get("/company", requireMarketer, getMyCompany);
 // Company candidate roster
 router.post("/candidates", requireMarketer, addMarketerCandidate);
 router.get("/candidates", requireMarketer, getMarketerCandidates);
+router.get("/candidates/:id/detail", requireMarketer, getMarketerCandidateDetail);
 router.delete("/candidates/:id", requireMarketer, removeMarketerCandidate);
+router.post("/candidates/:id/invite", requireMarketer, inviteCandidate);
 
 // Forward openings
 router.post("/forward", requireMarketer, forwardOpening);
+router.post("/forward-with-email", requireMarketer, forwardOpeningWithEmail);
 router.get("/forwarded", requireMarketer, getForwardedOpenings);
+router.patch("/forwarded/:id/status", requireMarketer, updateForwardedStatus);
 
 export default router;

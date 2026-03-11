@@ -6,6 +6,7 @@ import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import jobsRoutes from "./routes/jobs.routes";
 import marketerRoutes from "./routes/marketer.routes";
+import financialsRoutes from "./routes/financials.routes";
 import internalRoutes from "./routes/internal.routes";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
@@ -13,7 +14,11 @@ import { requireCandidate } from "./middleware/auth.middleware";
 import {
   listCompanies,
   getCandidateForwardedOpenings,
+  verifyInvite,
+  acceptInvite,
+  searchCompanies,
 } from "./controllers/marketer.controller";
+import { requireAuth } from "./middleware/auth.middleware";
 import { addSSEClient } from "./services/sse.service";
 
 const app = express();
@@ -36,6 +41,15 @@ app.use(express.urlencoded({ extended: true }));
 // Public: list all companies (for candidate/vendor registration dropdowns)
 app.get("/api/jobs/companies", listCompanies);
 
+// Public: fuzzy search companies (for candidate registration dropdown)
+app.get("/api/jobs/companies/search", searchCompanies);
+
+// Public: verify invite token (no auth required)
+app.get("/api/jobs/invite/:token", verifyInvite);
+
+// Accept invite (requires auth — candidate must be logged in)
+app.post("/api/jobs/invite/:token/accept", requireAuth, acceptInvite);
+
 // Candidate: forwarded openings from their marketing company
 app.get(
   "/api/jobs/candidate/forwarded",
@@ -44,6 +58,7 @@ app.get(
 );
 
 app.use("/api/jobs/marketer", marketerRoutes); // must be BEFORE /api/jobs to avoid :id collision
+app.use("/api/jobs/marketer/financials", financialsRoutes);
 app.use("/api/jobs", jobsRoutes);
 
 // Internal: service-to-service ingest (data-collection → PostgreSQL)

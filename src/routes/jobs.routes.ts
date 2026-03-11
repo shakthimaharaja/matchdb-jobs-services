@@ -28,6 +28,7 @@ import {
   requireVendor,
   requireCandidate,
 } from "../middleware/auth.middleware";
+import { getCandidateMyDetail } from "../controllers/marketer.controller";
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.get("/count", countJobs);
 router.get("/profiles-count", countProfiles);
 
 // Candidate routes — ALL named paths BEFORE /:id
+router.get("/candidate/my-detail", requireCandidate, getCandidateMyDetail);
 router.get("/my-applications", requireCandidate, myApplications);
 router.get("/jobmatches", requireCandidate, candidateMatches); // ranked jobs for candidate
 router.get("/profile", requireAuth, getProfile);

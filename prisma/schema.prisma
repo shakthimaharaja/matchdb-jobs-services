@@ -33,12 +33,15 @@ model Job {
   experienceRequired Int           @default(0)
   applicationCount   Int           @default(0)
   isActive           Boolean       @default(true)
+  sourceUserId       String        @default("")  // who uploaded this job (for salary attribution)
+  sourceCompanyId    String        @default("")  // company unique ID for mapping
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   applications       Application[]
 
   @@index([vendorId, createdAt(sort: Desc)])
   @@index([isActive, createdAt(sort: Desc)])
+  @@index([sourceUserId])
   @@map("jobs")
 }
 
@@ -63,11 +66,14 @@ model CandidateProfile {
   resumeEducation    String   @default("")
   resumeAchievements String   @default("")
   visibilityConfig   Json?
+  companyId          String   @default("")  // linked company unique ID
+  companyName        String   @default("")  // denormalized company name
   profileLocked      Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@index([createdAt(sort: Desc)])
+  @@index([companyId])
   @@map("candidate_profiles")
 }
 
@@ -82,6 +88,7 @@ model Application {
   status         String   @default("pending")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  financials     ProjectFinancial[]
 
   @@unique([jobId, candidateId])
   @@index([candidateId])
@@ -144,6 +151,9 @@ model MarketerCandidate {
   candidateId    String   @default("")
   candidateName  String   @default("")
   candidateEmail String
+  inviteStatus   String   @default("none")  // none | invited | accepted | declined
+  inviteToken    String?  @unique           // one-time invite token
+  inviteSentAt   DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -178,4 +188,54 @@ model ForwardedOpening {
   @@unique([marketerId, candidateEmail, jobId])
   @@index([candidateEmail, createdAt(sort: Desc)])
   @@map("forwarded_openings")
+}
+
+model CompanyInvite {
+  id             String   @id @default(uuid())
+  companyId      String
+  companyName    String   @default("")
+  marketerId     String
+  marketerEmail  String   @default("")
+  candidateEmail String
+  candidateName  String   @default("")
+  token          String   @unique @default(uuid())
+  offerNote      String   @default("")
+  status         String   @default("pending")  // pending | accepted | declined | expired
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, candidateEmail])
+  @@map("company_invites")
+}
+
+model ProjectFinancial {
+  id              String   @id @default(uuid())
+  applicationId   String
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  marketerId      String
+  candidateId     String   @default("")
+  candidateEmail  String   @default("")
+  billRate        Decimal  @default(0)
+  payRate         Decimal  @default(0)
+  hoursWorked     Decimal  @default(0)
+  projectStart    DateTime?
+  projectEnd      DateTime?
+  stateCode       String   @default("")
+  stateTaxPct     Decimal  @default(0)
+  cashPct         Decimal  @default(0)
+  totalBilled     Decimal  @default(0)
+  totalPay        Decimal  @default(0)
+  taxAmount       Decimal  @default(0)
+  cashAmount      Decimal  @default(0)
+  netPayable      Decimal  @default(0)
+  amountPaid      Decimal  @default(0)
+  amountPending   Decimal  @default(0)
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([applicationId, marketerId])
+  @@index([marketerId, candidateId])
+  @@map("project_financials")
 }

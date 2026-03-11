@@ -258,6 +258,12 @@ export async function createJob(
       new Set([...extractedSkills, ...(body.skillsRequired || [])]),
     );
 
+    // Resolve the poster's company (if any) for salary attribution tracking
+    const posterCompany = await prisma.company.findUnique({
+      where: { marketerId: req.user!.userId },
+      select: { id: true },
+    }).catch(() => null);
+
     const job = await prisma.job.create({
       data: {
         title: body.title,
@@ -278,6 +284,8 @@ export async function createJob(
         recruiterPhone: body.recruiterPhone || "",
         vendorId: req.user!.userId,
         vendorEmail: req.user!.email,
+        sourceUserId: req.user!.userId,
+        sourceCompanyId: posterCompany?.id ?? null,
       },
     });
 
