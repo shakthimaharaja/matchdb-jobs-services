@@ -1,5 +1,27 @@
-import { IJob } from "../models/Job.model";
-import { ICandidateProfile } from "../models/CandidateProfile.model";
+// ─── Lightweight interfaces for matching (mirror Prisma Job & CandidateProfile) ─
+
+interface IJob {
+  _id?: string;
+  id?: string;
+  title: string;
+  skillsRequired: string[];
+  jobType: string;
+  jobSubType?: string;
+  experienceRequired: number;
+  toObject?(): Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface ICandidateProfile {
+  _id?: string;
+  id?: string;
+  skills: string[];
+  preferredJobType: string;
+  experienceYears: number;
+  visibilityConfig?: Record<string, string[]>;
+  toObject?(): Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 // Skills match: Jaccard-style overlap (case-insensitive)
 function calcSkillsScore(

@@ -35,7 +35,9 @@ matchdb-jobs-services/
 │   │   └── swagger.ts         # OpenAPI 3.0 spec (all endpoints)
 │   ├── controllers/
 │   │   ├── jobs.controller.ts      # CRUD for jobs, profiles, applications, matching, pokes
-│   │   └── marketer.controller.ts  # Company, roster, forwarding
+│   │   ├── marketer.controller.ts  # Company, roster, forwarding, invites
+│   │   ├── financials.controller.ts # Project financials, state tax rates, summaries
+│   │   └── ingest.controller.ts    # Bulk job/profile ingestion (internal)
 │   ├── middleware/
 │   │   ├── auth.middleware.ts      # JWT verification guard (reads username from token)
 │   │   └── error.middleware.ts     # Global error handler + 404
@@ -46,6 +48,7 @@ matchdb-jobs-services/
 │       ├── matching.service.ts       # Candidate-job matching algorithm
 │       ├── skill-extractor.service.ts # Auto-extract skills from text (~150 keywords)
 │       ├── sendgrid.service.ts       # Email dispatch
+│       ├── sse.service.ts            # Server-Sent Events for live refresh
 │       ├── ws-counts.service.ts      # WebSocket /ws/counts — live job & profile counts
 │       └── ws-public-data.service.ts # WebSocket /ws/public-data — live data with diffs
 ├── Dockerfile
@@ -89,18 +92,57 @@ matchdb-jobs-services/
 
 ### Marketer
 
-| Method | Path                           | Auth     | Description                  |
-| ------ | ------------------------------ | -------- | ---------------------------- |
-| GET    | `/api/marketer/stats`          | Marketer | Dashboard stats              |
-| GET    | `/api/marketer/jobs`           | Marketer | Browse available jobs        |
-| GET    | `/api/marketer/profiles`       | Marketer | Browse candidate profiles    |
-| POST   | `/api/marketer/company`        | Marketer | Register a company           |
-| GET    | `/api/marketer/company`        | Marketer | Get own company              |
-| POST   | `/api/marketer/candidates`     | Marketer | Add candidate to roster      |
-| GET    | `/api/marketer/candidates`     | Marketer | List rostered candidates     |
-| DELETE | `/api/marketer/candidates/:id` | Marketer | Remove candidate from roster |
-| POST   | `/api/marketer/forward`        | Marketer | Forward a job to a candidate |
-| GET    | `/api/marketer/forwarded`      | Marketer | List forwarded openings      |
+| Method | Path                                       | Auth     | Description                               |
+| ------ | ------------------------------------------ | -------- | ----------------------------------------- |
+| GET    | `/api/marketer/stats`                      | Marketer | Dashboard stats                           |
+| GET    | `/api/marketer/jobs`                       | Marketer | Browse available jobs                     |
+| GET    | `/api/marketer/profiles`                   | Marketer | Browse candidate profiles                 |
+| POST   | `/api/marketer/company`                    | Marketer | Register a company                        |
+| GET    | `/api/marketer/company`                    | Marketer | Get own company                           |
+| GET    | `/api/marketer/company-summary`            | Marketer | Company financial/resource summary        |
+| POST   | `/api/marketer/candidates`                 | Marketer | Add candidate to roster                   |
+| GET    | `/api/marketer/candidates`                 | Marketer | List rostered candidates                  |
+| GET    | `/api/marketer/candidates/:id/detail`      | Marketer | Full candidate detail (profile, projects) |
+| DELETE | `/api/marketer/candidates/:id`             | Marketer | Remove candidate from roster              |
+| POST   | `/api/marketer/candidates/:id/invite`      | Marketer | Send invite link to candidate             |
+| POST   | `/api/marketer/forward`                    | Marketer | Forward a job to a candidate              |
+| POST   | `/api/marketer/forward-with-email`         | Marketer | Forward opening + send email notification |
+| GET    | `/api/marketer/forwarded`                  | Marketer | List forwarded openings                   |
+| PATCH  | `/api/marketer/forwarded/:id/status`       | Marketer | Update forwarded opening status           |
+
+### Financials
+
+| Method | Path                                              | Auth     | Description                          |
+| ------ | ------------------------------------------------- | -------- | ------------------------------------ |
+| GET    | `/api/marketer/financials/states`                 | Marketer | US state tax rates                   |
+| GET    | `/api/marketer/financials/summary`                | Marketer | Company-wide financial summary       |
+| GET    | `/api/marketer/financials/candidate/:candidateId` | Marketer | Candidate financial records          |
+| GET    | `/api/marketer/financials/:applicationId`         | Marketer | Get project financial record         |
+| POST   | `/api/marketer/financials`                        | Marketer | Create/update project financial data |
+| DELETE | `/api/marketer/financials/:applicationId`         | Marketer | Delete project financial record      |
+
+### Candidate
+
+| Method | Path                              | Auth      | Description                    |
+| ------ | --------------------------------- | --------- | ------------------------------ |
+| GET    | `/api/jobs/candidate/forwarded`   | Candidate | Forwarded openings for self    |
+| GET    | `/api/jobs/candidate/my-detail`   | Candidate | Full self-detail + financials  |
+
+### Company & Invites (Public / Auth)
+
+| Method | Path                              | Auth    | Description                    |
+| ------ | --------------------------------- | ------- | ------------------------------ |
+| GET    | `/api/jobs/companies`             | No      | List all companies             |
+| GET    | `/api/jobs/companies/search`      | No      | Fuzzy company search           |
+| GET    | `/api/jobs/invite/:token`         | No      | Verify invite token            |
+| POST   | `/api/jobs/invite/:token/accept`  | Yes     | Accept invite                  |
+
+### Internal
+
+| Method | Path                          | Auth         | Description              |
+| ------ | ----------------------------- | ------------ | ------------------------ |
+| POST   | `/api/internal/ingest/jobs`     | Internal key | Bulk ingest jobs         |
+| POST   | `/api/internal/ingest/profiles` | Internal key | Bulk ingest profiles     |
 
 ### WebSocket Endpoints
 
@@ -145,6 +187,14 @@ Roster entry: `companyId`, `marketerId`, `candidateId`, `candidateName`, `candid
 ### ForwardedOpening
 
 `marketerId`, `candidateId`, `candidateName`, `candidateEmail`, `jobId`, `jobTitle`, `vendorEmail`
+
+### CompanyInvite
+
+Marketer invite tokens: `companyId`, `marketerId`, `candidateEmail`, `token` (unique), `status` (pending / accepted / expired), `expiresAt`
+
+### ProjectFinancial
+
+Per-application financial record: `applicationId`, `companyId`, `candidateId`, `billRate`, `payRate`, `hoursPerWeek`, `stateTaxRate`, `federalTaxRate`, `cashPct`, `netPayable`, `margin`
 
 ---
 
@@ -209,12 +259,6 @@ The server starts on **http://localhost:8001**.
 ## API Documentation (Swagger)
 
 Interactive API docs at **http://localhost:8001/api-docs**. OpenAPI 3.0 spec defined in `src/config/swagger.ts`.
-
----
-
-## License
-
-MIT
 
 ---
 

@@ -10,7 +10,7 @@ import { sendPokeEmail } from "../services/sendgrid.service";
 import { extractSkills } from "../services/skill-extractor.service";
 import { AppError } from "../middleware/error.middleware";
 
-// ─── Plan Limit Tables ────────────────────────────────────────────────────────
+// --- Plan Limit Tables --------------------------------------------------------
 
 const JOB_POSTING_LIMITS: Record<string, number> = {
   free: 0,
@@ -47,7 +47,7 @@ function toSnakeCase(obj: any): any {
 
 // Converts snake_case keys to camelCase for Prisma
 function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  return str.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
 }
 
 function toCamelCase(obj: any): any {
@@ -70,21 +70,21 @@ function profileToJSON(p: any): any {
   return toSnakeCase({ ...p, id: p.id });
 }
 
-// Pagination helper — parses page/limit from query string
+// Pagination helper � parses page/limit from query string
 function parsePagination(query: any): {
   page: number;
   limit: number;
   skip: number;
 } {
-  const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+  const page = Math.max(1, Number.parseInt(query.page as string, 10) || 1);
   const limit = Math.min(
     100,
-    Math.max(1, parseInt(query.limit as string, 10) || 25),
+    Math.max(1, Number.parseInt(query.limit as string, 10) || 25),
   );
   return { page, limit, skip: (page - 1) * limit };
 }
 
-// GET /api/jobs/count — lightweight count of active jobs
+// GET /api/jobs/count � lightweight count of active jobs
 export async function countJobs(
   _req: Request,
   res: Response,
@@ -98,7 +98,7 @@ export async function countJobs(
   }
 }
 
-// GET /api/jobs/profiles-count — lightweight count of candidate profiles
+// GET /api/jobs/profiles-count � lightweight count of candidate profiles
 export async function countProfiles(
   _req: Request,
   res: Response,
@@ -112,7 +112,7 @@ export async function countProfiles(
   }
 }
 
-// GET /api/jobs — active jobs, paginated for authenticated users
+// GET /api/jobs � active jobs, paginated for authenticated users
 export async function listJobs(
   req: Request,
   res: Response,
@@ -151,7 +151,7 @@ export async function listJobs(
   }
 }
 
-// GET /api/jobs/profiles-public — public candidate profile listing (limited fields)
+// GET /api/jobs/profiles-public � public candidate profile listing (limited fields)
 export async function listPublicProfiles(
   req: Request,
   res: Response,
@@ -201,7 +201,7 @@ export async function listPublicProfiles(
   }
 }
 
-// POST /api/jobs/create — vendor creates job
+// POST /api/jobs/create � vendor creates job
 export async function createJob(
   req: Request,
   res: Response,
@@ -233,10 +233,10 @@ export async function createJob(
 
     const body = schema.parse(incoming);
 
-    // ── Job posting limit enforcement ──────────────────────────────────────
+    // -- Job posting limit enforcement --------------------------------------
     const plan = req.user!.plan || "free";
     const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
-    if (isFinite(jobLimit)) {
+    if (Number.isFinite(jobLimit)) {
       const activeCount = await prisma.job.count({
         where: { vendorId: req.user!.userId, isActive: true },
       });
@@ -259,10 +259,12 @@ export async function createJob(
     );
 
     // Resolve the poster's company (if any) for salary attribution tracking
-    const posterCompany = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-      select: { id: true },
-    }).catch(() => null);
+    const posterCompany = await prisma.company
+      .findUnique({
+        where: { marketerId: req.user!.userId },
+        select: { id: true },
+      })
+      .catch(() => null);
 
     const job = await prisma.job.create({
       data: {
@@ -275,9 +277,9 @@ export async function createJob(
         jobType: body.jobType || "contract",
         jobSubType: body.jobSubType || "",
         workMode: body.workMode || "",
-        salaryMin: body.salaryMin != null ? body.salaryMin : undefined,
-        salaryMax: body.salaryMax != null ? body.salaryMax : undefined,
-        payPerHour: body.payPerHour != null ? body.payPerHour : undefined,
+        salaryMin: body.salaryMin ?? undefined,
+        salaryMax: body.salaryMax ?? undefined,
+        payPerHour: body.payPerHour ?? undefined,
         skillsRequired: mergedSkills,
         experienceRequired: body.experienceRequired ?? 0,
         recruiterName: body.recruiterName || "",
@@ -285,7 +287,7 @@ export async function createJob(
         vendorId: req.user!.userId,
         vendorEmail: req.user!.email,
         sourceUserId: req.user!.userId,
-        sourceCompanyId: posterCompany?.id ?? null,
+        sourceCompanyId: posterCompany?.id ?? undefined,
       },
     });
 
@@ -311,7 +313,9 @@ export async function getJob(
       res.status(404).json({ error: "Job not found" });
       return;
     }
-    const count = await prisma.application.count({ where: { jobId: req.params.id } });
+    const count = await prisma.application.count({
+      where: { jobId: req.params.id },
+    });
     const result = jobToJSON(job);
     result.application_count = count;
     res.json(result);
@@ -328,7 +332,7 @@ export async function applyToJob(
 ): Promise<void> {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id } });
-    if (!job || !job.isActive) {
+    if (!job?.isActive) {
       res.status(404).json({ error: "Job not found or inactive" });
       return;
     }
@@ -340,8 +344,7 @@ export async function applyToJob(
           jobTitle: job.title,
           candidateId: req.user!.userId,
           candidateEmail: req.user!.email,
-          coverLetter:
-            (req.body as any).coverLetter || (req.body as any).cover_letter || "",
+          coverLetter: req.body.coverLetter || req.body.cover_letter || "",
         },
       });
 
@@ -363,7 +366,7 @@ export async function applyToJob(
   }
 }
 
-// PATCH /api/jobs/:id/close — vendor closes (deactivates) their own job
+// PATCH /api/jobs/:id/close � vendor closes (deactivates) their own job
 export async function closeJob(
   req: Request,
   res: Response,
@@ -383,7 +386,9 @@ export async function closeJob(
       where: { id: req.params.id },
       data: { isActive: false },
     });
-    const count = await prisma.application.count({ where: { jobId: req.params.id } });
+    const count = await prisma.application.count({
+      where: { jobId: req.params.id },
+    });
     const result = jobToJSON(updated);
     result.application_count = count;
     res.json(result);
@@ -392,7 +397,7 @@ export async function closeJob(
   }
 }
 
-// PATCH /api/jobs/:id/reopen — vendor re-activates their own closed job
+// PATCH /api/jobs/:id/reopen � vendor re-activates their own closed job
 export async function reopenJob(
   req: Request,
   res: Response,
@@ -409,10 +414,10 @@ export async function reopenJob(
       return;
     }
 
-    // ── Reopen limit enforcement ───────────────────────────────────────────
+    // -- Reopen limit enforcement -------------------------------------------
     const plan = req.user!.plan || "free";
     const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
-    if (isFinite(jobLimit)) {
+    if (Number.isFinite(jobLimit)) {
       const activeCount = await prisma.job.count({
         where: { vendorId: req.user!.userId, isActive: true },
       });
@@ -431,7 +436,9 @@ export async function reopenJob(
       where: { id: req.params.id },
       data: { isActive: true },
     });
-    const count = await prisma.application.count({ where: { jobId: req.params.id } });
+    const count = await prisma.application.count({
+      where: { jobId: req.params.id },
+    });
     const result = jobToJSON(updated);
     result.application_count = count;
     res.json(result);
@@ -457,7 +464,7 @@ export async function myApplications(
   }
 }
 
-// GET /api/jobs/vendor — vendor's own jobs (paginated)
+// GET /api/jobs/vendor � vendor's own jobs (paginated)
 export async function vendorJobs(
   req: Request,
   res: Response,
@@ -497,7 +504,7 @@ export async function vendorJobs(
   }
 }
 
-// GET /api/jobs/profile — candidate profile
+// GET /api/jobs/profile � candidate profile
 export async function getProfile(
   req: Request,
   res: Response,
@@ -517,14 +524,14 @@ export async function getProfile(
   }
 }
 
-// POST /api/jobs/profile — create profile
+// POST /api/jobs/profile � create profile
 export async function createProfile(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const rawVisibilityConfig = (req.body as any).visibility_config;
+    const rawVisibilityConfig = req.body.visibility_config;
     const incoming = toCamelCase(req.body);
     if (rawVisibilityConfig !== undefined) {
       incoming.visibilityConfig = rawVisibilityConfig;
@@ -548,7 +555,9 @@ export async function createProfile(
       res.status(201).json(profileToJSON(profile));
     } catch (e) {
       if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
-        res.status(409).json({ error: "Profile already exists. Use PUT to update." });
+        res
+          .status(409)
+          .json({ error: "Profile already exists. Use PUT to update." });
         return;
       }
       throw e;
@@ -558,14 +567,107 @@ export async function createProfile(
   }
 }
 
-// PUT /api/jobs/profile — create (first time) or update (append-only when locked)
+// -- Helpers for updateProfile --
+
+function validateAppendOnlyFields(existing: any, incoming: any): string | null {
+  const appendFields = [
+    "resumeSummary",
+    "resumeExperience",
+    "resumeEducation",
+    "resumeAchievements",
+  ] as const;
+  for (const field of appendFields) {
+    const existingVal = existing[field] || "";
+    const incomingVal = incoming[field] || "";
+    if (incomingVal && existingVal && !incomingVal.startsWith(existingVal)) {
+      return `Cannot modify existing content in ${field}. You may only append new content.`;
+    }
+  }
+  return null;
+}
+
+function mergeVisibilityConfig(
+  existingVis: Record<string, string[]>,
+  incomingVis: Record<string, string[]>,
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = {};
+  for (const [type, subs] of Object.entries(existingVis)) {
+    merged[type] = Array.isArray(subs) ? [...subs] : [];
+  }
+  for (const [type, subs] of Object.entries(incomingVis)) {
+    if (merged[type] === undefined) {
+      merged[type] = Array.isArray(subs) ? [...subs] : [];
+    } else {
+      merged[type] = Array.from(
+        new Set([...merged[type], ...(Array.isArray(subs) ? subs : [])]),
+      );
+    }
+  }
+  return merged;
+}
+
+function buildLockedUpdateData(existing: any, incoming: any): any {
+  const mergedVis = mergeVisibilityConfig(
+    existing.visibilityConfig || {},
+    incoming.visibilityConfig || {},
+  );
+
+  const fullResumeText = [
+    incoming.resumeSummary || existing.resumeSummary || "",
+    incoming.resumeExperience || existing.resumeExperience || "",
+    incoming.resumeEducation || existing.resumeEducation || "",
+    incoming.resumeAchievements || existing.resumeAchievements || "",
+    incoming.bio || existing.bio || "",
+    existing.currentRole || "",
+  ].join(" ");
+  const mergedSkills = Array.from(
+    new Set([...existing.skills, ...extractSkills(fullResumeText)]),
+  );
+
+  return {
+    phone: incoming.phone ?? existing.phone,
+    location: incoming.location ?? existing.location,
+    preferredJobType: incoming.preferredJobType ?? existing.preferredJobType,
+    expectedHourlyRate:
+      incoming.expectedHourlyRate === undefined
+        ? existing.expectedHourlyRate
+        : incoming.expectedHourlyRate,
+    bio: incoming.bio ?? existing.bio,
+    experienceYears: incoming.experienceYears ?? existing.experienceYears,
+    resumeSummary: incoming.resumeSummary || existing.resumeSummary,
+    resumeExperience: incoming.resumeExperience || existing.resumeExperience,
+    resumeEducation: incoming.resumeEducation || existing.resumeEducation,
+    resumeAchievements:
+      incoming.resumeAchievements || existing.resumeAchievements,
+    visibilityConfig: mergedVis,
+    skills: mergedSkills,
+  };
+}
+
+function buildNewProfileData(incoming: any): any {
+  const resumeText = [
+    incoming.resumeSummary || "",
+    incoming.resumeExperience || "",
+    incoming.resumeEducation || "",
+    incoming.resumeAchievements || "",
+    incoming.bio || "",
+    incoming.currentRole || "",
+  ].join(" ");
+  return {
+    ...incoming,
+    skills: extractSkills(resumeText),
+    profileLocked: true,
+  };
+}
+
+// PUT /api/jobs/profile � create (first time) or update (append-only when locked)
 export async function updateProfile(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const rawVisibilityConfig = (req.body as any).visibility_config;
+    const rawVisibilityConfig = req.body.visibility_config;
     const incoming = toCamelCase(req.body);
     if (rawVisibilityConfig !== undefined) {
       incoming.visibilityConfig = rawVisibilityConfig;
@@ -577,30 +679,12 @@ export async function updateProfile(
 
     let updateData: any;
 
-    if (existing && existing.profileLocked) {
-      // ── Append-only resume fields: incoming must start with existing text ──
-      const appendFields = [
-        "resumeSummary",
-        "resumeExperience",
-        "resumeEducation",
-        "resumeAchievements",
-      ] as const;
-      for (const field of appendFields) {
-        const existingVal = (existing as any)[field] || "";
-        const incomingVal = incoming[field] || "";
-        if (
-          incomingVal &&
-          existingVal &&
-          !incomingVal.startsWith(existingVal)
-        ) {
-          res.status(400).json({
-            error: `Cannot modify existing content in ${field}. You may only append new content.`,
-          });
-          return;
-        }
+    if (existing?.profileLocked) {
+      const appendError = validateAppendOnlyFields(existing, incoming);
+      if (appendError) {
+        res.status(400).json({ error: appendError });
+        return;
       }
-
-      // ── Experience years: can only increase ──
       if (
         incoming.experienceYears != null &&
         incoming.experienceYears < existing.experienceYears
@@ -610,81 +694,13 @@ export async function updateProfile(
         });
         return;
       }
-
-      // ── Visibility config: union-merge ──
-      const existingVis: Record<string, string[]> =
-        (existing.visibilityConfig as any) || {};
-      const incomingVis: Record<string, string[]> =
-        incoming.visibilityConfig || {};
-      const mergedVis: Record<string, string[]> = {};
-      for (const [type, subs] of Object.entries(existingVis)) {
-        mergedVis[type] = Array.isArray(subs) ? [...subs] : [];
-      }
-      for (const [type, subs] of Object.entries(incomingVis)) {
-        if (!mergedVis[type]) {
-          mergedVis[type] = Array.isArray(subs) ? [...subs] : [];
-        } else {
-          mergedVis[type] = Array.from(
-            new Set([...mergedVis[type], ...(Array.isArray(subs) ? subs : [])]),
-          );
-        }
-      }
-
-      // ── Re-extract skills from full resume text & union with existing ──
-      const fullResumeText = [
-        incoming.resumeSummary || existing.resumeSummary || "",
-        incoming.resumeExperience || existing.resumeExperience || "",
-        incoming.resumeEducation || existing.resumeEducation || "",
-        incoming.resumeAchievements || existing.resumeAchievements || "",
-        incoming.bio || existing.bio || "",
-        existing.currentRole || "",
-      ].join(" ");
-      const newSkills = extractSkills(fullResumeText);
-      const mergedSkills = Array.from(
-        new Set([...existing.skills, ...newSkills]),
-      );
-
-      updateData = {
-        phone: incoming.phone ?? existing.phone,
-        location: incoming.location ?? existing.location,
-        preferredJobType:
-          incoming.preferredJobType ?? existing.preferredJobType,
-        expectedHourlyRate:
-          incoming.expectedHourlyRate !== undefined
-            ? incoming.expectedHourlyRate
-            : existing.expectedHourlyRate,
-        bio: incoming.bio ?? existing.bio,
-        experienceYears: incoming.experienceYears ?? existing.experienceYears,
-        resumeSummary: incoming.resumeSummary || existing.resumeSummary,
-        resumeExperience:
-          incoming.resumeExperience || existing.resumeExperience,
-        resumeEducation: incoming.resumeEducation || existing.resumeEducation,
-        resumeAchievements:
-          incoming.resumeAchievements || existing.resumeAchievements,
-        visibilityConfig: mergedVis,
-        skills: mergedSkills,
-      };
+      updateData = buildLockedUpdateData(existing, incoming);
     } else {
-      // First-time creation — require profileCountry
       if (!incoming.profileCountry) {
         res.status(400).json({ error: "Subscription country is required." });
         return;
       }
-      // Extract skills from resume text and lock the profile
-      const resumeText = [
-        incoming.resumeSummary || "",
-        incoming.resumeExperience || "",
-        incoming.resumeEducation || "",
-        incoming.resumeAchievements || "",
-        incoming.bio || "",
-        incoming.currentRole || "",
-      ].join(" ");
-      const extractedSkills = extractSkills(resumeText);
-      updateData = {
-        ...incoming,
-        skills: extractedSkills,
-        profileLocked: true,
-      };
+      updateData = buildNewProfileData(incoming);
     }
 
     const profile = await prisma.candidateProfile.upsert({
@@ -704,7 +720,7 @@ export async function updateProfile(
   }
 }
 
-// DELETE /api/jobs/profile — permanently delete candidate profile
+// DELETE /api/jobs/profile � permanently delete candidate profile
 export async function deleteProfile(
   req: Request,
   res: Response,
@@ -727,7 +743,72 @@ export async function deleteProfile(
   }
 }
 
-// GET /api/jobs/matches — ranked jobs for candidate (paginated)
+// -- Helpers for candidateMatches --
+
+function filterMatchesByCountry(
+  allMatched: any[],
+  candidateCountry: string,
+): any[] {
+  if (!candidateCountry) return allMatched;
+  return allMatched.filter((m: any) => {
+    const jobCountry = m.jobCountry || m.job_country || "";
+    return jobCountry === candidateCountry;
+  });
+}
+
+function filterMatchesByAllowedTypes(
+  matches: any[],
+  typesParam: string | undefined,
+): any[] {
+  if (!typesParam) return matches;
+  const allowedTypes = new Set(
+    typesParam.split(",").map((t: string) => t.trim()),
+  );
+  return matches.filter((m: any) => {
+    const jt = m.jobType || m.job_type || "";
+    return allowedTypes.has(jt);
+  });
+}
+
+function applyQueryFilters(matched: any[], query: Record<string, any>): any[] {
+  let result = matched;
+
+  const filterTypeParam = query.filter_type as string | undefined;
+  if (filterTypeParam) {
+    result = result.filter(
+      (m: any) => (m.jobType || m.job_type || "") === filterTypeParam,
+    );
+  }
+
+  const subTypeParam = query.sub_type as string | undefined;
+  if (subTypeParam) {
+    result = result.filter(
+      (m: any) => (m.jobSubType || m.job_sub_type || "") === subTypeParam,
+    );
+  }
+
+  const workModeParam = query.work_mode as string | undefined;
+  if (workModeParam) {
+    result = result.filter(
+      (m: any) => (m.workMode || m.work_mode || "") === workModeParam,
+    );
+  }
+
+  const searchParam = query.search as string | undefined;
+  if (searchParam) {
+    const q = searchParam.trim().toLowerCase();
+    result = result.filter((m: any) => {
+      const title = (m.title || "").toLowerCase();
+      const loc = (m.location || "").toLowerCase();
+      const email = (m.vendorEmail || m.vendor_email || "").toLowerCase();
+      return title.includes(q) || loc.includes(q) || email.includes(q);
+    });
+  }
+
+  return result;
+}
+
+// GET /api/jobs/matches � ranked jobs for candidate (paginated)
 export async function candidateMatches(
   req: Request,
   res: Response,
@@ -739,9 +820,9 @@ export async function candidateMatches(
     });
     if (!profile) {
       res.json(
-        req.query.page !== undefined
-          ? { data: [], total: 0, page: 1, limit: 25, totalPages: 0 }
-          : [],
+        req.query.page === undefined
+          ? []
+          : { data: [], total: 0, page: 1, limit: 25, totalPages: 0 },
       );
       return;
     }
@@ -749,32 +830,19 @@ export async function candidateMatches(
     const jobs = await prisma.job.findMany({ where: { isActive: true } });
     const allMatched = matchCandidateToJobs(profile as any, jobs as any);
 
-    // ── Location-based filtering ──
-    const candidateCountry = profile.profileCountry || "";
-    const locationFiltered = candidateCountry
-      ? allMatched.filter((m: any) => {
-          const jobCountry = m.jobCountry || m.job_country || "";
-          return jobCountry === candidateCountry;
-        })
-      : allMatched;
+    const locationFiltered = filterMatchesByCountry(
+      allMatched,
+      profile.profileCountry || "",
+    );
+    let matched = filterMatchesByAllowedTypes(
+      locationFiltered,
+      req.query.types as string | undefined,
+    );
 
-    // Filter by allowed types if specified (from membership config)
-    const typesParam = req.query.types as string | undefined;
-    const allowedTypes = typesParam
-      ? typesParam.split(",").map((t: string) => t.trim())
-      : null;
-    let matched = allowedTypes
-      ? locationFiltered.filter((m: any) => {
-          const jt = m.jobType || m.job_type || "";
-          return allowedTypes.includes(jt);
-        })
-      : locationFiltered;
-
-    // ── Aggregate type/subtype counts ──
-    const typeFilteredSet = matched;
+    // -- Aggregate type/subtype counts --
     const typeCounts: Record<string, number> = {};
     const subTypeCounts: Record<string, Record<string, number>> = {};
-    for (const m of typeFilteredSet) {
+    for (const m of matched) {
       const jt = m.jobType || m.job_type || "other";
       typeCounts[jt] = (typeCounts[jt] || 0) + 1;
       const jst = m.jobSubType || m.job_sub_type || "";
@@ -784,41 +852,7 @@ export async function candidateMatches(
       }
     }
 
-    // ── Additional server-side filters ──
-    const filterTypeParam = req.query.filter_type as string | undefined;
-    if (filterTypeParam) {
-      matched = matched.filter((m: any) => {
-        const jt = m.jobType || m.job_type || "";
-        return jt === filterTypeParam;
-      });
-    }
-
-    const subTypeParam = req.query.sub_type as string | undefined;
-    if (subTypeParam) {
-      matched = matched.filter((m: any) => {
-        const jst = m.jobSubType || m.job_sub_type || "";
-        return jst === subTypeParam;
-      });
-    }
-
-    const workModeParam = req.query.work_mode as string | undefined;
-    if (workModeParam) {
-      matched = matched.filter((m: any) => {
-        const wm = m.workMode || m.work_mode || "";
-        return wm === workModeParam;
-      });
-    }
-
-    const searchParam = req.query.search as string | undefined;
-    if (searchParam) {
-      const q = searchParam.trim().toLowerCase();
-      matched = matched.filter((m: any) => {
-        const title = (m.title || "").toLowerCase();
-        const loc = (m.location || "").toLowerCase();
-        const email = (m.vendorEmail || m.vendor_email || "").toLowerCase();
-        return title.includes(q) || loc.includes(q) || email.includes(q);
-      });
-    }
+    matched = applyQueryFilters(matched, req.query);
 
     const wantPaginated = req.query.page !== undefined;
     if (wantPaginated) {
@@ -843,7 +877,7 @@ export async function candidateMatches(
   }
 }
 
-// GET /api/jobs/vendor-candidates?job_id=xxx — ranked candidates for vendor (paginated)
+// GET /api/jobs/vendor-candidates?job_id=xxx � ranked candidates for vendor (paginated)
 export async function vendorCandidates(
   req: Request,
   res: Response,
@@ -858,14 +892,14 @@ export async function vendorCandidates(
     const jobs = await prisma.job.findMany({ where: jobWhere });
     if (!jobs.length) {
       res.json(
-        req.query.page !== undefined
-          ? { data: [], total: 0, page: 1, limit: 25, totalPages: 0 }
-          : [],
+        req.query.page === undefined
+          ? []
+          : { data: [], total: 0, page: 1, limit: 25, totalPages: 0 },
       );
       return;
     }
 
-    // ── Location-based filtering ──
+    // -- Location-based filtering --
     const jobCountries = new Set(
       jobs.map((j: any) => j.jobCountry || "").filter(Boolean),
     );
@@ -875,7 +909,9 @@ export async function vendorCandidates(
       profileWhere.profileCountry = { in: Array.from(jobCountries) };
     }
 
-    const profiles = await prisma.candidateProfile.findMany({ where: profileWhere });
+    const profiles = await prisma.candidateProfile.findMany({
+      where: profileWhere,
+    });
     const matched = matchJobsToCandidates(jobs as any, profiles as any);
 
     const wantPaginated = req.query.page !== undefined;
@@ -934,7 +970,7 @@ export async function poke(
       job_title,
     } = schema.parse(req.body);
 
-    // ── Once-per enforcement ──────────────────────────────────────────────
+    // -- Once-per enforcement ----------------------------------------------
     const already = await prisma.pokeRecord.findFirst({
       where: {
         senderId: req.user!.userId,
@@ -952,10 +988,10 @@ export async function poke(
       return;
     }
 
-    // ── Monthly poke limit enforcement ────────────────────────────────────
+    // -- Monthly poke limit enforcement ------------------------------------
     const plan = req.user!.plan || "free";
     const pokeLimit = POKE_LIMITS[plan] ?? 5;
-    if (isFinite(pokeLimit)) {
+    if (Number.isFinite(pokeLimit)) {
       const yearMonth = new Date().toISOString().slice(0, 7);
       const log = await prisma.pokeLog.upsert({
         where: { userId_yearMonth: { userId: req.user!.userId, yearMonth } },
@@ -985,7 +1021,7 @@ export async function poke(
       pdfFilename: `${to_name.replace(/\s+/g, "_")}_resume.pdf`,
     });
 
-    // ── Persist poke record ───────────────────────────────────────────────
+    // -- Persist poke record -----------------------------------------------
     await prisma.pokeRecord.create({
       data: {
         senderId: req.user!.userId,
@@ -1015,7 +1051,7 @@ export async function poke(
   }
 }
 
-// GET /api/jobs/pokes/sent — all pokes/emails the authenticated user has sent
+// GET /api/jobs/pokes/sent � all pokes/emails the authenticated user has sent
 export async function getPokesSent(
   req: Request,
   res: Response,
@@ -1033,7 +1069,7 @@ export async function getPokesSent(
   }
 }
 
-// GET /api/jobs/pokes/received — pokes/emails received by the authenticated user
+// GET /api/jobs/pokes/received � pokes/emails received by the authenticated user
 export async function getPokesReceived(
   req: Request,
   res: Response,
@@ -1073,7 +1109,7 @@ export async function getPokesReceived(
   }
 }
 
-// GET /api/jobs/resume/:username — public profile view by username
+// GET /api/jobs/resume/:username � public profile view by username
 export async function getProfileByUsername(
   req: Request,
   res: Response,
@@ -1094,7 +1130,7 @@ export async function getProfileByUsername(
   }
 }
 
-// GET /api/jobs/resume/:username/download — download resume as plain-text file (auth required)
+// GET /api/jobs/resume/:username/download � download resume as plain-text file (auth required)
 export async function downloadResume(
   req: Request,
   res: Response,
@@ -1111,10 +1147,10 @@ export async function downloadResume(
     }
 
     const now = new Date().toISOString().slice(0, 10);
-    const skills = profile.skills?.join(", ") || "—";
+    const skills = profile.skills?.join(", ") || "�";
     const rate = profile.expectedHourlyRate
       ? `$${profile.expectedHourlyRate}/hr`
-      : "—";
+      : "�";
 
     const lines = [
       "================================================================",
@@ -1125,16 +1161,16 @@ export async function downloadResume(
       "",
       "PERSONAL INFORMATION",
       "--------------------",
-      `Name        : ${profile.name || "—"}`,
-      `Email       : ${profile.email || "—"}`,
-      `Phone       : ${profile.phone || "—"}`,
-      `Location    : ${profile.location || "—"}`,
+      `Name        : ${profile.name || "�"}`,
+      `Email       : ${profile.email || "�"}`,
+      `Phone       : ${profile.phone || "�"}`,
+      `Location    : ${profile.location || "�"}`,
       "",
       "PROFESSIONAL DETAILS",
       "--------------------",
-      `Current Company : ${profile.currentCompany || "—"}`,
-      `Current Role    : ${profile.currentRole || "—"}`,
-      `Preferred Type  : ${profile.preferredJobType || "—"}`,
+      `Current Company : ${profile.currentCompany || "�"}`,
+      `Current Role    : ${profile.currentRole || "�"}`,
+      `Preferred Type  : ${profile.preferredJobType || "�"}`,
       `Expected Rate   : ${rate}`,
       `Experience      : ${profile.experienceYears || 0} years`,
       "",
@@ -1144,19 +1180,19 @@ export async function downloadResume(
       "",
       "PROFESSIONAL SUMMARY",
       "--------------------",
-      profile.resumeSummary || "—",
+      profile.resumeSummary || "�",
       "",
       "WORK EXPERIENCE",
       "---------------",
-      profile.resumeExperience || "—",
+      profile.resumeExperience || "�",
       "",
       "EDUCATION",
       "---------",
-      profile.resumeEducation || "—",
+      profile.resumeEducation || "�",
       "",
       "ACHIEVEMENTS & CERTIFICATIONS",
       "-----------------------------",
-      profile.resumeAchievements || "—",
+      profile.resumeAchievements || "�",
       "",
       "================================================================",
       "  Generated by MatchDB  |  http://localhost:3000",

@@ -7,7 +7,7 @@
  * After insert → triggers immediate /ws/public-data broadcast + SSE data_changed event.
  */
 import type { Request, Response } from "express";
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 import { prisma } from "../config/prisma";
 import { triggerPublicDataBroadcast } from "../services/ws-public-data.service";
 import { broadcastSSEEvent } from "../services/sse.service";
@@ -64,14 +64,14 @@ function mapJobRecord(r: CollectionJob) {
     jobType: r.job_type ?? "full_time",
     jobSubType: r.job_subtype ?? "",
     workMode: r.work_mode ?? "",
-    salaryMin: r.salary_min != null ? r.salary_min : undefined,
-    salaryMax: r.salary_max != null ? r.salary_max : undefined,
-    payPerHour: r.pay_per_hour != null ? r.pay_per_hour : undefined,
+    salaryMin: r.salary_min ?? undefined,
+    salaryMax: r.salary_max ?? undefined,
+    payPerHour: r.pay_per_hour ?? undefined,
     skillsRequired: Array.isArray(r.skills_required) ? r.skills_required : [],
     experienceRequired: r.experience_required ?? 0,
     isActive: true,
     // Map the data-collection uploader for salary attribution
-    sourceUserId: r.uploaded_by ? String(r.uploaded_by) : null,
+    sourceUserId: r.uploaded_by ? String(r.uploaded_by) : undefined,
   };
 }
 
@@ -95,7 +95,7 @@ function mapProfileRecord(r: CollectionProfile) {
     currentCompany: r.current_company ?? "",
     currentRole: r.current_role ?? "",
     preferredJobType: r.preferred_job_type ?? "",
-    expectedHourlyRate: r.expected_hourly_rate != null ? r.expected_hourly_rate : undefined,
+    expectedHourlyRate: r.expected_hourly_rate ?? undefined,
     experienceYears: r.experience_years ?? 0,
     skills: Array.isArray(r.skills) ? r.skills : [],
     location: r.location ?? "",
@@ -124,7 +124,10 @@ export async function ingestJobs(req: Request, res: Response): Promise<void> {
   let skipped = 0;
 
   for (const r of records) {
-    if (!r.title) { skipped++; continue; }
+    if (!r.title) {
+      skipped++;
+      continue;
+    }
 
     // Dedup: skip if same title+company+location already exists for system vendor
     const existing = await prisma.job.findFirst({
@@ -135,7 +138,10 @@ export async function ingestJobs(req: Request, res: Response): Promise<void> {
       },
       select: { id: true },
     });
-    if (existing) { skipped++; continue; }
+    if (existing) {
+      skipped++;
+      continue;
+    }
 
     await prisma.job.create({ data: mapJobRecord(r) });
     inserted++;
@@ -159,7 +165,10 @@ export async function ingestJobs(req: Request, res: Response): Promise<void> {
  * POST /api/internal/ingest/profiles
  * Body: { records: CollectionProfile[] }
  */
-export async function ingestProfiles(req: Request, res: Response): Promise<void> {
+export async function ingestProfiles(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const records: CollectionProfile[] = req.body?.records ?? [];
   if (!Array.isArray(records) || records.length === 0) {
     res.status(400).json({ error: "records array required" });
@@ -170,14 +179,20 @@ export async function ingestProfiles(req: Request, res: Response): Promise<void>
   let skipped = 0;
 
   for (const r of records) {
-    if (!r.name || !r.email) { skipped++; continue; }
+    if (!r.name || !r.email) {
+      skipped++;
+      continue;
+    }
 
     // Dedup: skip if same email already has a profile
     const existing = await prisma.candidateProfile.findFirst({
       where: { email: { equals: r.email.toLowerCase(), mode: "insensitive" } },
       select: { id: true },
     });
-    if (existing) { skipped++; continue; }
+    if (existing) {
+      skipped++;
+      continue;
+    }
 
     await prisma.candidateProfile.create({ data: mapProfileRecord(r) });
     inserted++;

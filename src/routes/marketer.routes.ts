@@ -15,6 +15,7 @@ import {
   inviteCandidate,
   forwardOpeningWithEmail,
   updateForwardedStatus,
+  getCompanySummary,
 } from "../controllers/marketer.controller";
 
 const router = Router();
@@ -27,11 +28,16 @@ router.get("/profiles", requireMarketer, getMarketerProfiles);
 // Company management
 router.post("/company", requireMarketer, registerCompany);
 router.get("/company", requireMarketer, getMyCompany);
+router.get("/company-summary", requireMarketer, getCompanySummary);
 
 // Company candidate roster
 router.post("/candidates", requireMarketer, addMarketerCandidate);
 router.get("/candidates", requireMarketer, getMarketerCandidates);
-router.get("/candidates/:id/detail", requireMarketer, getMarketerCandidateDetail);
+router.get(
+  "/candidates/:id/detail",
+  requireMarketer,
+  getMarketerCandidateDetail,
+);
 router.delete("/candidates/:id", requireMarketer, removeMarketerCandidate);
 router.post("/candidates/:id/invite", requireMarketer, inviteCandidate);
 

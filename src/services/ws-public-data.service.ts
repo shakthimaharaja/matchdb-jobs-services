@@ -52,6 +52,75 @@ let prevProfileObjects = new Map<string, Record<string, unknown>>();
 const BROADCAST_INTERVAL_MS = 30_000;
 const MAX_ROWS = 25;
 
+// ── Diff helper ─────────────────────────────────────────────────────────────
+
+interface DiffResult {
+  newMap: Map<string, string>;
+  newObjects: Map<string, Record<string, unknown>>;
+  changedIds: string[];
+  deletedIds: string[];
+  deletedItems: Record<string, unknown>[];
+}
+
+function diffRecords(
+  items: Record<string, unknown>[],
+  prevMap: Map<string, string>,
+  prevObjects: Map<string, Record<string, unknown>>,
+): DiffResult {
+  const newMap = new Map<string, string>();
+  const newObjects = new Map<string, Record<string, unknown>>();
+  const changedIds: string[] = [];
+  const deletedIds: string[] = [];
+  const deletedItems: Record<string, unknown>[] = [];
+
+  for (const item of items) {
+    const id = item.id as string;
+    const serialized = JSON.stringify(item);
+    newMap.set(id, serialized);
+    newObjects.set(id, item);
+    const prev = prevMap.get(id);
+    if (prev === undefined || prev !== serialized) {
+      changedIds.push(id);
+    }
+  }
+  for (const oldId of prevMap.keys()) {
+    if (!newMap.has(oldId)) {
+      deletedIds.push(oldId);
+      const oldObj = prevObjects.get(oldId);
+      if (oldObj) deletedItems.push(oldObj);
+    }
+  }
+
+  return { newMap, newObjects, changedIds, deletedIds, deletedItems };
+}
+
+// ── Simulated activity helper ───────────────────────────────────────────────
+
+function simulateActivity(
+  items: Record<string, unknown>[],
+  changedIds: string[],
+  deletedIds: string[],
+  deletedItems: Record<string, unknown>[],
+): void {
+  if (changedIds.length > 0 || deletedIds.length > 0 || items.length === 0)
+    return;
+  if (Math.random() < 0.33) {
+    const delIdx = Math.floor(Math.random() * items.length);
+    const delItem = items[delIdx];
+    deletedIds.push(delItem.id as string);
+    deletedItems.push(delItem);
+  } else {
+    const count = Math.min(items.length, 2 + Math.floor(Math.random() * 2));
+    const indices = new Set<number>();
+    while (indices.size < count) {
+      indices.add(Math.floor(Math.random() * items.length));
+    }
+    for (const idx of indices) {
+      changedIds.push(items[idx].id as string);
+    }
+  }
+}
+
 // ── Core ────────────────────────────────────────────────────────────────────
 
 async function fetchSnapshot(): Promise<{
@@ -87,112 +156,36 @@ async function fetchSnapshot(): Promise<{
     }),
   ]);
 
-  const jobs = rawJobs.map((j) => jobToJSON(j as unknown as Record<string, unknown>));
+  const jobs = rawJobs.map((j) =>
+    jobToJSON(j as unknown as Record<string, unknown>),
+  );
   const profiles = rawProfiles.map((p) =>
     profileToJSON(p as unknown as Record<string, unknown>),
   );
 
   // ── Diff jobs ──────────────────────────────────────────────────────────
-  const newJobMap = new Map<string, string>();
-  const newJobObjects = new Map<string, Record<string, unknown>>();
-  const changedJobIds: string[] = [];
-  const deletedJobIds: string[] = [];
-  const deletedJobs: Record<string, unknown>[] = [];
-
-  for (const j of jobs) {
-    const id = j.id as string;
-    const serialized = JSON.stringify(j);
-    newJobMap.set(id, serialized);
-    newJobObjects.set(id, j);
-    const prev = prevJobMap.get(id);
-    if (prev === undefined || prev !== serialized) {
-      changedJobIds.push(id);
-    }
-  }
-  // Detect removed IDs (present before, absent now) → separate deletion list
-  for (const oldId of prevJobMap.keys()) {
-    if (!newJobMap.has(oldId)) {
-      deletedJobIds.push(oldId);
-      const oldObj = prevJobObjects.get(oldId);
-      if (oldObj) deletedJobs.push(oldObj);
-    }
-  }
-  prevJobMap = newJobMap;
-  prevJobObjects = newJobObjects;
+  const jobDiff = diffRecords(jobs, prevJobMap, prevJobObjects);
+  prevJobMap = jobDiff.newMap;
+  prevJobObjects = jobDiff.newObjects;
 
   // ── Diff profiles ──────────────────────────────────────────────────────
-  const newProfileMap = new Map<string, string>();
-  const newProfileObjects = new Map<string, Record<string, unknown>>();
-  const changedProfileIds: string[] = [];
-  const deletedProfileIds: string[] = [];
-  const deletedProfiles: Record<string, unknown>[] = [];
+  const profileDiff = diffRecords(profiles, prevProfileMap, prevProfileObjects);
+  prevProfileMap = profileDiff.newMap;
+  prevProfileObjects = profileDiff.newObjects;
 
-  for (const p of profiles) {
-    const id = p.id as string;
-    const serialized = JSON.stringify(p);
-    newProfileMap.set(id, serialized);
-    newProfileObjects.set(id, p);
-    const prev = prevProfileMap.get(id);
-    if (prev === undefined || prev !== serialized) {
-      changedProfileIds.push(id);
-    }
-  }
-  for (const oldId of prevProfileMap.keys()) {
-    if (!newProfileMap.has(oldId)) {
-      deletedProfileIds.push(oldId);
-      const oldObj = prevProfileObjects.get(oldId);
-      if (oldObj) deletedProfiles.push(oldObj);
-    }
-  }
-  prevProfileMap = newProfileMap;
-  prevProfileObjects = newProfileObjects;
-
-  // ── Simulated activity ──────────────────────────────────────────────
-  if (
-    changedJobIds.length === 0 &&
-    deletedJobIds.length === 0 &&
-    jobs.length > 0
-  ) {
-    if (Math.random() < 0.33) {
-      const delIdx = Math.floor(Math.random() * jobs.length);
-      const delJob = jobs[delIdx];
-      deletedJobIds.push(delJob.id as string);
-      deletedJobs.push(delJob);
-    } else {
-      const count = Math.min(jobs.length, 2 + Math.floor(Math.random() * 2));
-      const indices = new Set<number>();
-      while (indices.size < count) {
-        indices.add(Math.floor(Math.random() * jobs.length));
-      }
-      for (const idx of indices) {
-        changedJobIds.push(jobs[idx].id as string);
-      }
-    }
-  }
-  if (
-    changedProfileIds.length === 0 &&
-    deletedProfileIds.length === 0 &&
-    profiles.length > 0
-  ) {
-    if (Math.random() < 0.33) {
-      const delIdx = Math.floor(Math.random() * profiles.length);
-      const delProf = profiles[delIdx];
-      deletedProfileIds.push(delProf.id as string);
-      deletedProfiles.push(delProf);
-    } else {
-      const count = Math.min(
-        profiles.length,
-        2 + Math.floor(Math.random() * 2),
-      );
-      const indices = new Set<number>();
-      while (indices.size < count) {
-        indices.add(Math.floor(Math.random() * profiles.length));
-      }
-      for (const idx of indices) {
-        changedProfileIds.push(profiles[idx].id as string);
-      }
-    }
-  }
+  // ── Simulated activity ─────────────────────────────────────────────────
+  simulateActivity(
+    jobs,
+    jobDiff.changedIds,
+    jobDiff.deletedIds,
+    jobDiff.deletedItems,
+  );
+  simulateActivity(
+    profiles,
+    profileDiff.changedIds,
+    profileDiff.deletedIds,
+    profileDiff.deletedItems,
+  );
 
   // Cache for immediate sends
   lastJobsPayload = jobs;
@@ -201,12 +194,12 @@ async function fetchSnapshot(): Promise<{
   return {
     jobs,
     profiles,
-    changedJobIds,
-    changedProfileIds,
-    deletedJobIds,
-    deletedProfileIds,
-    deletedJobs,
-    deletedProfiles,
+    changedJobIds: jobDiff.changedIds,
+    changedProfileIds: profileDiff.changedIds,
+    deletedJobIds: jobDiff.deletedIds,
+    deletedProfileIds: profileDiff.deletedIds,
+    deletedJobs: jobDiff.deletedItems,
+    deletedProfiles: profileDiff.deletedItems,
   };
 }
 

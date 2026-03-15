@@ -1,5 +1,4 @@
-import { createServer } from "http";
-import { parse } from "url";
+import { createServer } from "node:http";
 import { env } from "./config/env";
 import { prisma } from "./config/prisma";
 import app from "./app";
@@ -15,7 +14,7 @@ async function main() {
 
   // Route HTTP upgrade requests to the correct WSS by pathname
   server.on("upgrade", (req, socket, head) => {
-    const { pathname } = parse(req.url || "");
+    const { pathname } = new URL(req.url || "", `http://localhost:${env.PORT}`);
 
     if (pathname === "/ws/counts") {
       countsWss.handleUpgrade(req, socket, head, (ws) => {

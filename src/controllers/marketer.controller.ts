@@ -3,7 +3,7 @@ import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { prisma } from "../config/prisma";
 import { sendPokeEmail } from "../services/sendgrid.service";
 
-// ─── Marketer: Dashboard Stats ────────────────────────────────────────────────
+// --- Marketer: Dashboard Stats ------------------------------------------------
 
 /**
  * GET /api/jobs/marketer/stats
@@ -48,7 +48,7 @@ export async function getMarketerStats(
  * Query params:
  *   page   (default 1)
  *   limit  (default 50, max 100)
- *   search (optional — matches title or skills)
+ *   search (optional � matches title or skills)
  */
 export async function getMarketerJobs(
   req: Request,
@@ -56,12 +56,17 @@ export async function getMarketerJobs(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const rawPage = typeof req.query.page === "string" ? req.query.page : "1";
+    const rawLimit =
+      typeof req.query.limit === "string" ? req.query.limit : "50";
+    const page = Math.max(1, Number.parseInt(rawPage, 10) || 1);
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50),
+      Math.max(1, Number.parseInt(rawLimit, 10) || 50),
     );
-    const search = String(req.query.search ?? "").trim();
+    const search = (
+      typeof req.query.search === "string" ? req.query.search : ""
+    ).trim();
 
     const where: any = { isActive: true };
     if (search) {
@@ -110,9 +115,9 @@ export async function getMarketerJobs(
       job_sub_type: j.jobSubType ?? "",
       work_mode: j.workMode ?? "",
       skills_required: j.skillsRequired ?? [],
-      salary_min: j.salaryMin != null ? Number(j.salaryMin) : null,
-      salary_max: j.salaryMax != null ? Number(j.salaryMax) : null,
-      pay_per_hour: j.payPerHour != null ? Number(j.payPerHour) : null,
+      salary_min: j.salaryMin == null ? null : Number(j.salaryMin),
+      salary_max: j.salaryMax == null ? null : Number(j.salaryMax),
+      pay_per_hour: j.payPerHour == null ? null : Number(j.payPerHour),
       experience_required: j.experienceRequired ?? 0,
       application_count: j.applicationCount ?? 0,
       poke_count: pokeMap[j.id]?.pokes ?? 0,
@@ -127,7 +132,7 @@ export async function getMarketerJobs(
   }
 }
 
-// ─── Marketer: All Candidate Profiles ────────────────────────────────────────
+// --- Marketer: All Candidate Profiles ----------------------------------------
 
 /**
  * GET /api/jobs/marketer/profiles
@@ -136,7 +141,7 @@ export async function getMarketerJobs(
  * Query params:
  *   page   (default 1)
  *   limit  (default 50, max 100)
- *   search (optional — matches name, role, skills, or location)
+ *   search (optional � matches name, role, skills, or location)
  */
 export async function getMarketerProfiles(
   req: Request,
@@ -144,12 +149,17 @@ export async function getMarketerProfiles(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const rawPage = typeof req.query.page === "string" ? req.query.page : "1";
+    const rawLimit =
+      typeof req.query.limit === "string" ? req.query.limit : "50";
+    const page = Math.max(1, Number.parseInt(rawPage, 10) || 1);
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50),
+      Math.max(1, Number.parseInt(rawLimit, 10) || 50),
     );
-    const search = String(req.query.search ?? "").trim();
+    const search = (
+      typeof req.query.search === "string" ? req.query.search : ""
+    ).trim();
 
     const where: any = {};
     if (search) {
@@ -218,7 +228,7 @@ export async function getMarketerProfiles(
       preferred_job_type: p.preferredJobType ?? "",
       experience_years: p.experienceYears ?? 0,
       expected_hourly_rate:
-        p.expectedHourlyRate != null ? Number(p.expectedHourlyRate) : null,
+        p.expectedHourlyRate == null ? null : Number(p.expectedHourlyRate),
       skills: p.skills ?? [],
       location: p.location ?? "",
       resume_summary: p.resumeSummary ?? "",
@@ -237,7 +247,7 @@ export async function getMarketerProfiles(
   }
 }
 
-// ─── Company Registration ─────────────────────────────────────────────────────
+// --- Company Registration -----------------------------------------------------
 
 /**
  * POST /api/jobs/marketer/company
@@ -251,20 +261,18 @@ export async function registerCompany(
 ): Promise<void> {
   try {
     const { name } = req.body as { name?: string };
-    if (!name || !name.trim()) {
+    if (!name?.trim()) {
       res.status(400).json({ error: "Company name is required" });
       return;
     }
     const marketerId = req.user!.userId;
     const marketerEmail = req.user!.email;
 
-    // Upsert — one company per marketer
+    // Upsert � one company per marketer
     let company = await prisma.company.findUnique({ where: { marketerId } });
-    if (!company) {
-      company = await prisma.company.create({
-        data: { name: name.trim(), marketerId, marketerEmail },
-      });
-    }
+    company ??= await prisma.company.create({
+      data: { name: name.trim(), marketerId, marketerEmail },
+    });
 
     res.json({
       id: company.id,
@@ -307,11 +315,11 @@ export async function getMyCompany(
   }
 }
 
-// ─── Public: list all companies ───────────────────────────────────────────────
+// --- Public: list all companies -----------------------------------------------
 
 /**
  * GET /api/jobs/companies
- * Returns all company names (no auth required — used in registration forms).
+ * Returns all company names (no auth required � used in registration forms).
  */
 export async function listCompanies(
   _req: Request,
@@ -329,7 +337,7 @@ export async function listCompanies(
   }
 }
 
-// ─── Marketer Candidates (company roster) ────────────────────────────────────
+// --- Marketer Candidates (company roster) ------------------------------------
 
 /**
  * POST /api/jobs/marketer/candidates
@@ -345,7 +353,7 @@ export async function addMarketerCandidate(
       candidateName?: string;
       candidateEmail?: string;
     };
-    if (!candidateEmail || !candidateEmail.trim()) {
+    if (!candidateEmail?.trim()) {
       res.status(400).json({ error: "Candidate email is required" });
       return;
     }
@@ -484,6 +492,259 @@ export async function getMarketerCandidates(
 }
 
 /**
+ * GET /api/jobs/marketer/company-summary
+ * Returns company-wide aggregated data for all candidates:
+ *  - Per-candidate financial totals
+ *  - All projects with financials, client info, start/end dates
+ *  - Job domain / role distribution
+ */
+export async function getCompanySummary(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const company = await prisma.company.findUnique({
+      where: { marketerId: req.user!.userId },
+    });
+    if (!company) {
+      res.json({
+        candidates: [],
+        projects: [],
+        domainCounts: [],
+        totals: {
+          totalBilled: 0,
+          totalPay: 0,
+          netPayable: 0,
+          amountPaid: 0,
+          amountPending: 0,
+          hoursWorked: 0,
+          taxAmount: 0,
+          cashAmount: 0,
+        },
+      });
+      return;
+    }
+
+    // 1. All roster candidates
+    const roster = await prisma.marketerCandidate.findMany({
+      where: { companyId: company.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 2. Matching profiles
+    const emails = roster.map((r) => r.candidateEmail.toLowerCase());
+    const profiles = await prisma.candidateProfile.findMany({
+      where: { email: { in: emails } },
+      select: {
+        id: true,
+        email: true,
+        candidateId: true,
+        name: true,
+        currentRole: true,
+        skills: true,
+        experienceYears: true,
+        location: true,
+        currentCompany: true,
+      },
+    });
+    const profileByEmail: Record<string, (typeof profiles)[0]> = {};
+    for (const p of profiles) profileByEmail[p.email.toLowerCase()] = p;
+
+    // 3. All financials for this marketer
+    const allFinancials = await prisma.projectFinancial.findMany({
+      where: { marketerId: req.user!.userId },
+    });
+    const finByAppId = new Map(allFinancials.map((f) => [f.applicationId, f]));
+
+    // 4. All applications for these candidates
+    const candidateIds = profiles
+      .map((p) => p.candidateId)
+      .filter(Boolean) as string[];
+    const applications = candidateIds.length
+      ? await prisma.application.findMany({
+          where: { candidateId: { in: candidateIds } },
+          include: {
+            job: {
+              select: {
+                id: true,
+                title: true,
+                vendorEmail: true,
+                location: true,
+                jobType: true,
+                jobSubType: true,
+                payPerHour: true,
+                salaryMin: true,
+                salaryMax: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
+
+    // Map candidateId -> email for lookup
+    const cidToEmail: Record<string, string> = {};
+    for (const p of profiles) cidToEmail[p.candidateId] = p.email.toLowerCase();
+
+    // 5. Build per-candidate financial totals
+    const candFinTotals: Record<
+      string,
+      {
+        totalBilled: number;
+        totalPay: number;
+        netPayable: number;
+        amountPaid: number;
+        amountPending: number;
+        hoursWorked: number;
+        projectCount: number;
+        activeProjects: number;
+      }
+    > = {};
+
+    // 6. Build projects array & domain counts
+    const domainMap: Record<string, number> = {};
+    const projectsOut: any[] = [];
+
+    for (const a of applications) {
+      const email = cidToEmail[a.candidateId] ?? "";
+      const rosterEntry = roster.find(
+        (r) => r.candidateEmail.toLowerCase() === email,
+      );
+      const prof = profileByEmail[email];
+      const fin = finByAppId.get(a.id);
+
+      const toNum = (v: any) =>
+        v == null ? 0 : typeof v === "number" ? v : Number(v);
+
+      // Aggregate per-candidate
+      if (!candFinTotals[email]) {
+        candFinTotals[email] = {
+          totalBilled: 0,
+          totalPay: 0,
+          netPayable: 0,
+          amountPaid: 0,
+          amountPending: 0,
+          hoursWorked: 0,
+          projectCount: 0,
+          activeProjects: 0,
+        };
+      }
+      const ct = candFinTotals[email];
+      ct.projectCount++;
+      if (a.job?.isActive) ct.activeProjects++;
+      if (fin) {
+        ct.totalBilled += toNum(fin.totalBilled);
+        ct.totalPay += toNum(fin.totalPay);
+        ct.netPayable += toNum(fin.netPayable);
+        ct.amountPaid += toNum(fin.amountPaid);
+        ct.amountPending += toNum(fin.amountPending);
+        ct.hoursWorked += toNum(fin.hoursWorked);
+      }
+
+      // Domain count — use job title or role
+      const domain = prof?.currentRole || a.job?.title || "Unknown";
+      domainMap[domain] = (domainMap[domain] || 0) + 1;
+
+      // Project row
+      projectsOut.push({
+        applicationId: a.id,
+        candidateId: rosterEntry?.id ?? "",
+        candidateName: rosterEntry?.candidateName ?? prof?.name ?? "",
+        candidateEmail: email,
+        jobTitle: a.job?.title ?? a.jobTitle,
+        vendorEmail: a.job?.vendorEmail ?? "",
+        location: a.job?.location ?? "",
+        jobType: a.job?.jobType ?? "",
+        jobSubType: a.job?.jobSubType ?? "",
+        isActive: a.job?.isActive ?? false,
+        appliedAt: a.createdAt?.toISOString() ?? "",
+        financials: fin
+          ? {
+              billRate: toNum(fin.billRate),
+              payRate: toNum(fin.payRate),
+              hoursWorked: toNum(fin.hoursWorked),
+              projectStart: fin.projectStart?.toISOString() ?? null,
+              projectEnd: fin.projectEnd?.toISOString() ?? null,
+              stateCode: fin.stateCode,
+              totalBilled: toNum(fin.totalBilled),
+              totalPay: toNum(fin.totalPay),
+              netPayable: toNum(fin.netPayable),
+              amountPaid: toNum(fin.amountPaid),
+              amountPending: toNum(fin.amountPending),
+            }
+          : null,
+      });
+    }
+
+    // 7. Build candidates array
+    const candidatesOut = roster.map((r) => {
+      const email = r.candidateEmail.toLowerCase();
+      const prof = profileByEmail[email];
+      const ft = candFinTotals[email];
+      return {
+        id: r.id,
+        candidateName: r.candidateName,
+        candidateEmail: r.candidateEmail,
+        inviteStatus: r.inviteStatus,
+        currentRole: prof?.currentRole ?? "",
+        location: prof?.location ?? "",
+        currentCompany: prof?.currentCompany ?? "",
+        skills: prof?.skills ?? [],
+        experienceYears: prof?.experienceYears ?? 0,
+        projectCount: ft?.projectCount ?? 0,
+        activeProjects: ft?.activeProjects ?? 0,
+        totalBilled: ft?.totalBilled ?? 0,
+        totalPay: ft?.totalPay ?? 0,
+        netPayable: ft?.netPayable ?? 0,
+        amountPaid: ft?.amountPaid ?? 0,
+        amountPending: ft?.amountPending ?? 0,
+        hoursWorked: ft?.hoursWorked ?? 0,
+      };
+    });
+
+    // 8. Grand totals
+    const grandTotals = {
+      totalBilled: 0,
+      totalPay: 0,
+      netPayable: 0,
+      amountPaid: 0,
+      amountPending: 0,
+      hoursWorked: 0,
+      taxAmount: 0,
+      cashAmount: 0,
+    };
+    for (const f of allFinancials) {
+      const toNum = (v: any) =>
+        v == null ? 0 : typeof v === "number" ? v : Number(v);
+      grandTotals.totalBilled += toNum(f.totalBilled);
+      grandTotals.totalPay += toNum(f.totalPay);
+      grandTotals.netPayable += toNum(f.netPayable);
+      grandTotals.amountPaid += toNum(f.amountPaid);
+      grandTotals.amountPending += toNum(f.amountPending);
+      grandTotals.hoursWorked += toNum(f.hoursWorked);
+      grandTotals.taxAmount += toNum(f.taxAmount);
+      grandTotals.cashAmount += toNum(f.cashAmount);
+    }
+
+    // 9. Domain counts sorted descending
+    const domainCounts = Object.entries(domainMap)
+      .map(([domain, count]) => ({ domain, count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({
+      candidates: candidatesOut,
+      projects: projectsOut,
+      domainCounts,
+      totals: grandTotals,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * GET /api/jobs/marketer/candidates/:id/detail
  * Returns a QuickBooks-style detail view for a single company candidate.
  */
@@ -550,7 +811,7 @@ export async function getMarketerCandidateDetail(
         })
       : [];
 
-    // Build a map of applicationId → financial for quick lookup
+    // Build a map of applicationId ? financial for quick lookup
     const financialMap = new Map(financials.map((f) => [f.applicationId, f]));
 
     // Get forwarded openings for this candidate from this marketer
@@ -564,8 +825,8 @@ export async function getMarketerCandidateDetail(
 
     // Get poke/email records received
     const targetIds = [profile?.id, profile?.candidateId].filter(
-      Boolean,
-    ) as string[];
+      (x): x is string => Boolean(x),
+    );
     const pokeRecords = targetIds.length
       ? await prisma.pokeRecord.findMany({
           where: { targetId: { in: targetIds } },
@@ -594,9 +855,9 @@ export async function getMarketerCandidateDetail(
             current_role: profile.currentRole,
             preferred_job_type: profile.preferredJobType,
             expected_hourly_rate:
-              profile.expectedHourlyRate != null
-                ? Number(profile.expectedHourlyRate)
-                : null,
+              profile.expectedHourlyRate == null
+                ? null
+                : Number(profile.expectedHourlyRate),
             experience_years: profile.experienceYears,
             skills: profile.skills,
             location: profile.location,
@@ -618,9 +879,9 @@ export async function getMarketerCandidateDetail(
           job_type: a.job?.jobType ?? "",
           job_sub_type: a.job?.jobSubType ?? "",
           pay_per_hour:
-            a.job?.payPerHour != null ? Number(a.job.payPerHour) : null,
-          salary_min: a.job?.salaryMin != null ? Number(a.job.salaryMin) : null,
-          salary_max: a.job?.salaryMax != null ? Number(a.job.salaryMax) : null,
+            a.job?.payPerHour == null ? null : Number(a.job.payPerHour),
+          salary_min: a.job?.salaryMin == null ? null : Number(a.job.salaryMin),
+          salary_max: a.job?.salaryMax == null ? null : Number(a.job.salaryMax),
           status: a.status,
           is_active: a.job?.isActive ?? false,
           applied_at: a.createdAt?.toISOString() ?? "",
@@ -696,7 +957,7 @@ export async function removeMarketerCandidate(
   }
 }
 
-// ─── Forward Opening to Candidate ────────────────────────────────────────────
+// --- Forward Opening to Candidate --------------------------------------------
 
 /**
  * POST /api/jobs/marketer/forward
@@ -824,9 +1085,9 @@ export async function getForwardedOpenings(
         job_sub_type: d.jobSubType,
         vendor_email: d.vendorEmail,
         skills_required: d.skillsRequired,
-        pay_per_hour: d.payPerHour != null ? Number(d.payPerHour) : null,
-        salary_min: d.salaryMin != null ? Number(d.salaryMin) : null,
-        salary_max: d.salaryMax != null ? Number(d.salaryMax) : null,
+        pay_per_hour: d.payPerHour == null ? null : Number(d.payPerHour),
+        salary_min: d.salaryMin == null ? null : Number(d.salaryMin),
+        salary_max: d.salaryMax == null ? null : Number(d.salaryMax),
         note: d.note,
         company_name: d.companyName,
         status: d.status,
@@ -838,7 +1099,7 @@ export async function getForwardedOpenings(
   }
 }
 
-// ─── Candidate: Get forwarded openings by email ──────────────────────────────
+// --- Candidate: Get forwarded openings by email ------------------------------
 
 /**
  * GET /api/jobs/candidate/forwarded
@@ -868,9 +1129,9 @@ export async function getCandidateForwardedOpenings(
         job_sub_type: d.jobSubType,
         vendor_email: d.vendorEmail,
         skills_required: d.skillsRequired,
-        pay_per_hour: d.payPerHour != null ? Number(d.payPerHour) : null,
-        salary_min: d.salaryMin != null ? Number(d.salaryMin) : null,
-        salary_max: d.salaryMax != null ? Number(d.salaryMax) : null,
+        pay_per_hour: d.payPerHour == null ? null : Number(d.payPerHour),
+        salary_min: d.salaryMin == null ? null : Number(d.salaryMin),
+        salary_max: d.salaryMax == null ? null : Number(d.salaryMax),
         note: d.note,
         status: d.status,
         created_at: d.createdAt?.toISOString() ?? "",
@@ -881,7 +1142,7 @@ export async function getCandidateForwardedOpenings(
   }
 }
 
-// ─── Invite candidate via email ───────────────────────────────────────────────
+// --- Invite candidate via email -----------------------------------------------
 
 /**
  * POST /api/jobs/marketer/candidates/:id/invite
@@ -956,13 +1217,17 @@ export async function inviteCandidate(
     const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
     const inviteLink = `${clientUrl}/invite/${invite.token}`;
 
+    const noteBlock = offerNote
+      ? `Note from your recruiter:\n"${offerNote}"\n\n`
+      : "";
+
     await sendPokeEmail({
       to: mc.candidateEmail,
       toName: mc.candidateName || mc.candidateEmail,
       fromName: `${company.name} (via MatchDB)`,
       fromEmail: req.user!.email,
       subjectContext: `You're invited to join ${company.name} on MatchDB`,
-      emailBody: `Hi ${mc.candidateName || "there"},\n\n${company.name} has invited you to join their team on MatchDB.\n\n${offerNote ? `Note from your recruiter:\n"${offerNote}"\n\n` : ""}Click the link below to accept and create your profile:\n${inviteLink}\n\nThis invite expires in 14 days.\n\nBest regards,\nThe MatchDB Team`,
+      emailBody: `Hi ${mc.candidateName || "there"},\n\n${company.name} has invited you to join their team on MatchDB.\n\n${noteBlock}Click the link below to accept and create your profile:\n${inviteLink}\n\nThis invite expires in 14 days.\n\nBest regards,\nThe MatchDB Team`,
     }).catch((err) => console.error("[Invite Email] Send failed:", err));
 
     res.json({
@@ -978,11 +1243,11 @@ export async function inviteCandidate(
   }
 }
 
-// ─── Public: verify invite token ──────────────────────────────────────────────
+// --- Public: verify invite token ----------------------------------------------
 
 /**
  * GET /api/jobs/invite/:token
- * Public — verifies an invite token and returns the offer details.
+ * Public � verifies an invite token and returns the offer details.
  */
 export async function verifyInvite(
   _req: Request,
@@ -1063,7 +1328,7 @@ export async function verifyInvite(
 
 /**
  * POST /api/jobs/invite/:token/accept
- * Candidate accepts the invite — links their profile to the company.
+ * Candidate accepts the invite � links their profile to the company.
  */
 export async function acceptInvite(
   req: Request,
@@ -1076,11 +1341,7 @@ export async function acceptInvite(
       where: { token },
     });
 
-    if (
-      !invite ||
-      invite.status !== "pending" ||
-      invite.expiresAt < new Date()
-    ) {
+    if (invite?.status !== "pending" || invite.expiresAt < new Date()) {
       res.status(400).json({ error: "Invalid or expired invite" });
       return;
     }
@@ -1106,7 +1367,7 @@ export async function acceptInvite(
     // If candidate has a profile, link it to the company
     if (req.user?.userId) {
       await prisma.candidateProfile.updateMany({
-        where: { candidateId: req.user.userId },
+        where: { candidateId: req.user!.userId },
         data: {
           companyId: invite.companyId,
           companyName: invite.companyName,
@@ -1124,11 +1385,11 @@ export async function acceptInvite(
   }
 }
 
-// ─── Company search (fuzzy for dropdown) ──────────────────────────────────────
+// --- Company search (fuzzy for dropdown) --------------------------------------
 
 /**
  * GET /api/jobs/companies/search?q=foo
- * Public — fuzzy search for company names (for candidate registration dropdown).
+ * Public � fuzzy search for company names (for candidate registration dropdown).
  */
 export async function searchCompanies(
   req: Request,
@@ -1136,7 +1397,7 @@ export async function searchCompanies(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const q = String(req.query.q ?? "").trim();
+    const q = (typeof req.query.q === "string" ? req.query.q : "").trim();
     if (!q) {
       res.json([]);
       return;
@@ -1155,7 +1416,7 @@ export async function searchCompanies(
   }
 }
 
-// ─── Forward opening WITH email notification ──────────────────────────────────
+// --- Forward opening WITH email notification ----------------------------------
 
 /**
  * POST /api/jobs/marketer/forward-with-email
@@ -1233,19 +1494,24 @@ export async function forwardOpeningWithEmail(
       });
 
       // Send email notification to candidate
-      const comp = job.payPerHour
-        ? `$${Number(job.payPerHour).toFixed(0)}/hr`
-        : job.salaryMin || job.salaryMax
-          ? `$${((Number(job.salaryMin) || Number(job.salaryMax)) / 1000).toFixed(0)}k`
-          : "Competitive";
+      let comp = "Competitive";
+      if (job.payPerHour) {
+        comp = `$${Number(job.payPerHour).toFixed(0)}/hr`;
+      } else if (job.salaryMin || job.salaryMax) {
+        comp = `$${((Number(job.salaryMin) || Number(job.salaryMax)) / 1000).toFixed(0)}k`;
+      }
+
+      const subTypeSuffix = job.jobSubType ? ` / ${job.jobSubType}` : "";
+      const recruiterNote = note ? `Recruiter's note:\n"${note}"\n\n` : "";
+      const skillsList = (job.skillsRequired || []).join(", ");
 
       await sendPokeEmail({
         to: candidateEmail.trim().toLowerCase(),
         toName: mc.candidateName || candidateEmail,
         fromName: `${company.name} (via MatchDB)`,
         fromEmail: req.user!.email,
-        subjectContext: `Job Opening: ${job.title} — ${job.location || "Remote"}`,
-        emailBody: `Hi ${mc.candidateName || "there"},\n\nYour recruiter at ${company.name} has shared a job opening with you:\n\nTitle: ${job.title}\nLocation: ${job.location || "Remote"}\nType: ${job.jobType}${job.jobSubType ? ` / ${job.jobSubType}` : ""}\nCompensation: ${comp}\nSkills: ${(job.skillsRequired || []).join(", ")}\n\n${note ? `Recruiter's note:\n"${note}"\n\n` : ""}Log in to MatchDB to view details and apply.\n\nBest regards,\nThe MatchDB Team`,
+        subjectContext: `Job Opening: ${job.title} � ${job.location || "Remote"}`,
+        emailBody: `Hi ${mc.candidateName || "there"},\n\nYour recruiter at ${company.name} has shared a job opening with you:\n\nTitle: ${job.title}\nLocation: ${job.location || "Remote"}\nType: ${job.jobType}${subTypeSuffix}\nCompensation: ${comp}\nSkills: ${skillsList}\n\n${recruiterNote}Log in to MatchDB to view details and apply.\n\nBest regards,\nThe MatchDB Team`,
       }).catch((err) => console.error("[Forward Email] Send failed:", err));
 
       res.status(201).json({
@@ -1270,7 +1536,7 @@ export async function forwardOpeningWithEmail(
   }
 }
 
-// ─── Update forwarded opening status ──────────────────────────────────────────
+// --- Update forwarded opening status ------------------------------------------
 
 /**
  * PATCH /api/jobs/marketer/forwarded/:id/status
@@ -1315,11 +1581,11 @@ export async function updateForwardedStatus(
   }
 }
 
-// ─── Candidate: My Detail (self-view) ─────────────────────────────────────────
+// --- Candidate: My Detail (self-view) -----------------------------------------
 
 /**
  * GET /api/jobs/candidate/my-detail
- * Returns the full detail view for the logged-in candidate — same structure
+ * Returns the full detail view for the logged-in candidate � same structure
  * as the marketer's candidate detail but:
  *  - NOT scoped to a single marketer (all financials from all marketers)
  *  - marketer_info: roster entries linking this candidate to marketers
@@ -1410,9 +1676,9 @@ export async function getCandidateMyDetail(
             current_role: profile.currentRole,
             preferred_job_type: profile.preferredJobType,
             expected_hourly_rate:
-              profile.expectedHourlyRate != null
-                ? Number(profile.expectedHourlyRate)
-                : null,
+              profile.expectedHourlyRate == null
+                ? null
+                : Number(profile.expectedHourlyRate),
             experience_years: profile.experienceYears,
             skills: profile.skills,
             location: profile.location,
@@ -1432,9 +1698,9 @@ export async function getCandidateMyDetail(
         job_type: a.job?.jobType ?? "",
         job_sub_type: a.job?.jobSubType ?? "",
         pay_per_hour:
-          a.job?.payPerHour != null ? Number(a.job.payPerHour) : null,
-        salary_min: a.job?.salaryMin != null ? Number(a.job.salaryMin) : null,
-        salary_max: a.job?.salaryMax != null ? Number(a.job.salaryMax) : null,
+          a.job?.payPerHour == null ? null : Number(a.job.payPerHour),
+        salary_min: a.job?.salaryMin == null ? null : Number(a.job.salaryMin),
+        salary_max: a.job?.salaryMax == null ? null : Number(a.job.salaryMax),
         status: a.status,
         is_active: a.job?.isActive ?? false,
         applied_at: a.createdAt?.toISOString() ?? "",
