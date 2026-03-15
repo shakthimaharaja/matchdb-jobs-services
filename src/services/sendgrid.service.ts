@@ -72,3 +72,79 @@ export async function sendPokeEmail(params: {
 
   await sgMail.send(msg);
 }
+
+export async function sendInterviewInviteEmail(params: {
+  to: string;
+  toName: string;
+  fromName: string;
+  fromEmail: string;
+  jobTitle: string;
+  meetLink: string;
+  proposedAt?: string;   // ISO string
+  message?: string;
+}): Promise<void> {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const proposedTime = params.proposedAt
+    ? new Date(params.proposedAt).toLocaleString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+      })
+    : 'To be confirmed';
+
+  if (!env.SENDGRID_API_KEY) {
+    console.log(`[SendGrid] (dev) Interview invite to ${params.to} from ${params.fromName} for "${params.jobTitle}" — Meet: ${params.meetLink}`);
+    return;
+  }
+
+  const html = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <div style="background: linear-gradient(135deg, #1d4479 0%, #3b6fa6 100%); padding: 24px; text-align: center;">
+      <h1 style="color: #fff; margin: 0; font-size: 28px;">Match<span style="color: #a8cbf5;">DB</span></h1>
+    </div>
+    <div style="padding: 32px 24px; background: #ffffff;">
+      <h2 style="color: #1d4479; margin-top: 0;">📞 Interview Invite</h2>
+      <p style="color: #444; line-height: 1.6;">Hi <strong>${params.toName}</strong>,</p>
+      <p style="color: #444; line-height: 1.6;">
+        <strong>${params.fromName}</strong> has invited you to a screening call for the position of
+        <strong>${params.jobTitle}</strong>.
+      </p>
+      ${params.message ? `<div style="background: #f0f4f8; border-left: 4px solid #3b6fa6; padding: 16px; margin: 16px 0;">
+        <p style="margin: 0; color: #333; white-space: pre-wrap;">${params.message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+      </div>` : ''}
+      <table style="width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 14px;">
+        <tr>
+          <td style="padding: 10px 12px; background: #f5f7fa; border: 1px solid #e0e0e0; font-weight: 700; width: 35%;">Proposed Time</td>
+          <td style="padding: 10px 12px; border: 1px solid #e0e0e0;">${proposedTime}</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px 12px; background: #f5f7fa; border: 1px solid #e0e0e0; font-weight: 700;">Position</td>
+          <td style="padding: 10px 12px; border: 1px solid #e0e0e0;">${params.jobTitle}</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px 12px; background: #f5f7fa; border: 1px solid #e0e0e0; font-weight: 700;">Google Meet</td>
+          <td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><a href="${params.meetLink}" style="color: #3b6fa6;">${params.meetLink}</a></td>
+        </tr>
+      </table>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${params.meetLink}" style="background: #1a73e8; color: #fff; padding: 14px 36px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 15px;">Join Google Meet</a>
+      </div>
+      <p style="color: #555; font-size: 13px;">
+        Please log into MatchDB to confirm or decline this invite.
+      </p>
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${clientUrl}" style="background: #3b6fa6; color: #fff; padding: 10px 28px; text-decoration: none; border-radius: 4px; font-weight: bold;">View on MatchDB</a>
+      </div>
+      <p style="color: #888; font-size: 12px; margin-top: 24px;">
+        You received this because your profile is visible on MatchDB.
+        <a href="${clientUrl}/settings" style="color: #3b6fa6;">Manage notifications</a>
+      </p>
+    </div>
+  </div>`;
+
+  await sgMail.send({
+    to: params.to,
+    from: { email: env.SENDGRID_FROM_EMAIL, name: env.SENDGRID_FROM_NAME },
+    replyTo: params.fromEmail,
+    subject: `Interview Invite: ${params.jobTitle} — ${params.fromName}`,
+    html,
+  });
+}

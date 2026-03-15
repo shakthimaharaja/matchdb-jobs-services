@@ -7,6 +7,8 @@ import { env } from "./config/env";
 import jobsRoutes from "./routes/jobs.routes";
 import marketerRoutes from "./routes/marketer.routes";
 import financialsRoutes from "./routes/financials.routes";
+import timesheetsRoutes from "./routes/timesheets.routes";
+import interviewsRoutes from "./routes/interviews.routes";
 import internalRoutes from "./routes/internal.routes";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
@@ -59,6 +61,8 @@ app.get(
 
 app.use("/api/jobs/marketer", marketerRoutes); // must be BEFORE /api/jobs to avoid :id collision
 app.use("/api/jobs/marketer/financials", financialsRoutes);
+app.use("/api/jobs/timesheets", timesheetsRoutes);
+app.use("/api/jobs/interviews", interviewsRoutes);
 app.use("/api/jobs", jobsRoutes);
 
 // Internal: service-to-service ingest (data-collection → PostgreSQL)

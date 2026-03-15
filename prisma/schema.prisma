@@ -239,3 +239,56 @@ model ProjectFinancial {
   @@index([marketerId, candidateId])
   @@map("project_financials")
 }
+
+// status: "draft" | "submitted" | "approved" | "rejected"
+// entries: [{date, day, hoursWorked, notes}]
+
+model Timesheet {
+  id             String    @id @default(uuid())
+  candidateId    String
+  candidateEmail String    @default("")
+  candidateName  String    @default("")
+  marketerId     String    @default("")
+  marketerEmail  String    @default("")
+  companyId      String    @default("")
+  companyName    String    @default("")
+  weekStart      DateTime
+  weekEnd        DateTime
+  entries        Json
+  totalHours     Decimal   @default(0)
+  status         String    @default("draft")
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  approverNotes  String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([candidateId, weekStart])
+  @@index([marketerId, status])
+  @@index([candidateId, weekStart(sort: Desc)])
+  @@map("timesheets")
+}
+
+// status: "pending" | "accepted" | "declined" | "cancelled"
+model InterviewInvite {
+  id             String    @id @default(uuid())
+  vendorId       String
+  vendorEmail    String    @default("")
+  vendorName     String    @default("")
+  candidateEmail String
+  candidateName  String    @default("")
+  jobId          String    @default("")
+  jobTitle       String    @default("")
+  meetLink       String    @default("")
+  proposedAt     DateTime?
+  message        String    @default("")
+  status         String    @default("pending")
+  respondedAt    DateTime?
+  candidateNote  String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([vendorId, createdAt(sort: Desc)])
+  @@index([candidateEmail, createdAt(sort: Desc)])
+  @@map("interview_invites")
+}

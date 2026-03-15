@@ -92,23 +92,23 @@ matchdb-jobs-services/
 
 ### Marketer
 
-| Method | Path                                       | Auth     | Description                               |
-| ------ | ------------------------------------------ | -------- | ----------------------------------------- |
-| GET    | `/api/marketer/stats`                      | Marketer | Dashboard stats                           |
-| GET    | `/api/marketer/jobs`                       | Marketer | Browse available jobs                     |
-| GET    | `/api/marketer/profiles`                   | Marketer | Browse candidate profiles                 |
-| POST   | `/api/marketer/company`                    | Marketer | Register a company                        |
-| GET    | `/api/marketer/company`                    | Marketer | Get own company                           |
-| GET    | `/api/marketer/company-summary`            | Marketer | Company financial/resource summary        |
-| POST   | `/api/marketer/candidates`                 | Marketer | Add candidate to roster                   |
-| GET    | `/api/marketer/candidates`                 | Marketer | List rostered candidates                  |
-| GET    | `/api/marketer/candidates/:id/detail`      | Marketer | Full candidate detail (profile, projects) |
-| DELETE | `/api/marketer/candidates/:id`             | Marketer | Remove candidate from roster              |
-| POST   | `/api/marketer/candidates/:id/invite`      | Marketer | Send invite link to candidate             |
-| POST   | `/api/marketer/forward`                    | Marketer | Forward a job to a candidate              |
-| POST   | `/api/marketer/forward-with-email`         | Marketer | Forward opening + send email notification |
-| GET    | `/api/marketer/forwarded`                  | Marketer | List forwarded openings                   |
-| PATCH  | `/api/marketer/forwarded/:id/status`       | Marketer | Update forwarded opening status           |
+| Method | Path                                  | Auth     | Description                               |
+| ------ | ------------------------------------- | -------- | ----------------------------------------- |
+| GET    | `/api/marketer/stats`                 | Marketer | Dashboard stats                           |
+| GET    | `/api/marketer/jobs`                  | Marketer | Browse available jobs                     |
+| GET    | `/api/marketer/profiles`              | Marketer | Browse candidate profiles                 |
+| POST   | `/api/marketer/company`               | Marketer | Register a company                        |
+| GET    | `/api/marketer/company`               | Marketer | Get own company                           |
+| GET    | `/api/marketer/company-summary`       | Marketer | Company financial/resource summary        |
+| POST   | `/api/marketer/candidates`            | Marketer | Add candidate to roster                   |
+| GET    | `/api/marketer/candidates`            | Marketer | List rostered candidates                  |
+| GET    | `/api/marketer/candidates/:id/detail` | Marketer | Full candidate detail (profile, projects) |
+| DELETE | `/api/marketer/candidates/:id`        | Marketer | Remove candidate from roster              |
+| POST   | `/api/marketer/candidates/:id/invite` | Marketer | Send invite link to candidate             |
+| POST   | `/api/marketer/forward`               | Marketer | Forward a job to a candidate              |
+| POST   | `/api/marketer/forward-with-email`    | Marketer | Forward opening + send email notification |
+| GET    | `/api/marketer/forwarded`             | Marketer | List forwarded openings                   |
+| PATCH  | `/api/marketer/forwarded/:id/status`  | Marketer | Update forwarded opening status           |
 
 ### Financials
 
@@ -123,26 +123,26 @@ matchdb-jobs-services/
 
 ### Candidate
 
-| Method | Path                              | Auth      | Description                    |
-| ------ | --------------------------------- | --------- | ------------------------------ |
-| GET    | `/api/jobs/candidate/forwarded`   | Candidate | Forwarded openings for self    |
-| GET    | `/api/jobs/candidate/my-detail`   | Candidate | Full self-detail + financials  |
+| Method | Path                            | Auth      | Description                   |
+| ------ | ------------------------------- | --------- | ----------------------------- |
+| GET    | `/api/jobs/candidate/forwarded` | Candidate | Forwarded openings for self   |
+| GET    | `/api/jobs/candidate/my-detail` | Candidate | Full self-detail + financials |
 
 ### Company & Invites (Public / Auth)
 
-| Method | Path                              | Auth    | Description                    |
-| ------ | --------------------------------- | ------- | ------------------------------ |
-| GET    | `/api/jobs/companies`             | No      | List all companies             |
-| GET    | `/api/jobs/companies/search`      | No      | Fuzzy company search           |
-| GET    | `/api/jobs/invite/:token`         | No      | Verify invite token            |
-| POST   | `/api/jobs/invite/:token/accept`  | Yes     | Accept invite                  |
+| Method | Path                             | Auth | Description          |
+| ------ | -------------------------------- | ---- | -------------------- |
+| GET    | `/api/jobs/companies`            | No   | List all companies   |
+| GET    | `/api/jobs/companies/search`     | No   | Fuzzy company search |
+| GET    | `/api/jobs/invite/:token`        | No   | Verify invite token  |
+| POST   | `/api/jobs/invite/:token/accept` | Yes  | Accept invite        |
 
 ### Internal
 
-| Method | Path                          | Auth         | Description              |
-| ------ | ----------------------------- | ------------ | ------------------------ |
-| POST   | `/api/internal/ingest/jobs`     | Internal key | Bulk ingest jobs         |
-| POST   | `/api/internal/ingest/profiles` | Internal key | Bulk ingest profiles     |
+| Method | Path                            | Auth         | Description          |
+| ------ | ------------------------------- | ------------ | -------------------- |
+| POST   | `/api/internal/ingest/jobs`     | Internal key | Bulk ingest jobs     |
+| POST   | `/api/internal/ingest/profiles` | Internal key | Bulk ingest profiles |
 
 ### WebSocket Endpoints
 
