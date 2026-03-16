@@ -1,7 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
-import { prisma } from "../config/prisma";
+import {
+  Job,
+  CandidateProfile,
+  Application,
+  PokeRecord,
+  PokeLog,
+  Company,
+} from "../models";
 import {
   matchCandidateToJobs,
   matchJobsToCandidates,
@@ -30,7 +36,7 @@ const POKE_LIMITS: Record<string, number> = {
 
 // Converts camelCase keys to snake_case for frontend consumption
 function camelToSnake(str: string): string {
-  return str.replace(/([A-Z])/g, "_$1").toLowerCase();
+  return str.replaceAll(/([A-Z])/g, "_$1").toLowerCase();
 }
 
 function toSnakeCase(obj: any): any {
@@ -45,9 +51,9 @@ function toSnakeCase(obj: any): any {
   return obj;
 }
 
-// Converts snake_case keys to camelCase for Prisma
+// Converts snake_case keys to camelCase for Mongoose
 function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+  return str.replaceAll(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
 }
 
 function toCamelCase(obj: any): any {
@@ -63,11 +69,11 @@ function toCamelCase(obj: any): any {
 }
 
 function jobToJSON(job: any): any {
-  return toSnakeCase({ ...job, id: job.id });
+  return toSnakeCase({ ...job, id: job._id || job.id });
 }
 
 function profileToJSON(p: any): any {
-  return toSnakeCase({ ...p, id: p.id });
+  return toSnakeCase({ ...p, id: p._id || p.id });
 }
 
 // Pagination helper � parses page/limit from query string
@@ -91,7 +97,7 @@ export async function countJobs(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const count = await prisma.job.count({ where: { isActive: true } });
+    const count = await Job.countDocuments({ isActive: true });
     res.json({ count });
   } catch (err) {
     next(err);
@@ -105,7 +111,7 @@ export async function countProfiles(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const count = await prisma.candidateProfile.count();
+    const count = await CandidateProfile.countDocuments();
     res.json({ count });
   } catch (err) {
     next(err);
@@ -124,13 +130,12 @@ export async function listJobs(
     if (wantPaginated) {
       const { page, limit, skip } = parsePagination(req.query);
       const [data, total] = await Promise.all([
-        prisma.job.findMany({
-          where: { isActive: true },
-          orderBy: { createdAt: "desc" },
-          skip,
-          take: limit,
-        }),
-        prisma.job.count({ where: { isActive: true } }),
+        Job.find({ isActive: true })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Job.countDocuments({ isActive: true }),
       ]);
       res.json({
         data: data.map(jobToJSON),
@@ -140,10 +145,9 @@ export async function listJobs(
         totalPages: Math.ceil(total / limit),
       });
     } else {
-      const jobs = await prisma.job.findMany({
-        where: { isActive: true },
-        orderBy: { createdAt: "desc" },
-      });
+      const jobs = await Job.find({ isActive: true })
+        .sort({ createdAt: -1 })
+        .lean();
       res.json(jobs.map(jobToJSON));
     }
   } catch (err) {
@@ -158,29 +162,20 @@ export async function listPublicProfiles(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const selectFields = {
-      id: true,
-      name: true,
-      currentRole: true,
-      currentCompany: true,
-      preferredJobType: true,
-      experienceYears: true,
-      expectedHourlyRate: true,
-      skills: true,
-      location: true,
-    };
+    const selectFields =
+      "name currentRole currentCompany preferredJobType experienceYears expectedHourlyRate skills location";
     const wantPaginated = req.query.page !== undefined;
 
     if (wantPaginated) {
       const { page, limit, skip } = parsePagination(req.query);
       const [data, total] = await Promise.all([
-        prisma.candidateProfile.findMany({
-          select: selectFields,
-          orderBy: { createdAt: "desc" },
-          skip,
-          take: limit,
-        }),
-        prisma.candidateProfile.count(),
+        CandidateProfile.find({})
+          .select(selectFields)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        CandidateProfile.countDocuments(),
       ]);
       res.json({
         data: data.map(profileToJSON),
@@ -190,10 +185,10 @@ export async function listPublicProfiles(
         totalPages: Math.ceil(total / limit),
       });
     } else {
-      const profiles = await prisma.candidateProfile.findMany({
-        select: selectFields,
-        orderBy: { createdAt: "desc" },
-      });
+      const profiles = await CandidateProfile.find({})
+        .select(selectFields)
+        .sort({ createdAt: -1 })
+        .lean();
       res.json(profiles.map(profileToJSON));
     }
   } catch (err) {
@@ -208,7 +203,7 @@ export async function createJob(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // Accept snake_case from frontend, convert to camelCase for Prisma
+    // Accept snake_case from frontend, convert to camelCase for Mongoose
     const incoming = toCamelCase(req.body);
     const schema = z.object({
       title: z.string().min(2),
@@ -237,8 +232,9 @@ export async function createJob(
     const plan = req.user!.plan || "free";
     const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
     if (Number.isFinite(jobLimit)) {
-      const activeCount = await prisma.job.count({
-        where: { vendorId: req.user!.userId, isActive: true },
+      const activeCount = await Job.countDocuments({
+        vendorId: req.user!.userId,
+        isActive: true,
       });
       if (activeCount >= jobLimit) {
         const err: AppError = new Error(
@@ -259,39 +255,37 @@ export async function createJob(
     );
 
     // Resolve the poster's company (if any) for salary attribution tracking
-    const posterCompany = await prisma.company
-      .findUnique({
-        where: { marketerId: req.user!.userId },
-        select: { id: true },
-      })
+    const posterCompany = await Company.findOne({
+      marketerId: req.user!.userId,
+    })
+      .select("_id")
+      .lean()
       .catch(() => null);
 
-    const job = await prisma.job.create({
-      data: {
-        title: body.title,
-        description: body.description || "",
-        location: body.location || "",
-        jobCountry: body.jobCountry,
-        jobState: body.jobState || "",
-        jobCity: body.jobCity || "",
-        jobType: body.jobType || "contract",
-        jobSubType: body.jobSubType || "",
-        workMode: body.workMode || "",
-        salaryMin: body.salaryMin ?? undefined,
-        salaryMax: body.salaryMax ?? undefined,
-        payPerHour: body.payPerHour ?? undefined,
-        skillsRequired: mergedSkills,
-        experienceRequired: body.experienceRequired ?? 0,
-        recruiterName: body.recruiterName || "",
-        recruiterPhone: body.recruiterPhone || "",
-        vendorId: req.user!.userId,
-        vendorEmail: req.user!.email,
-        sourceUserId: req.user!.userId,
-        sourceCompanyId: posterCompany?.id ?? undefined,
-      },
+    const job = await Job.create({
+      title: body.title,
+      description: body.description || "",
+      location: body.location || "",
+      jobCountry: body.jobCountry,
+      jobState: body.jobState || "",
+      jobCity: body.jobCity || "",
+      jobType: body.jobType || "contract",
+      jobSubType: body.jobSubType || "",
+      workMode: body.workMode || "",
+      salaryMin: body.salaryMin ?? undefined,
+      salaryMax: body.salaryMax ?? undefined,
+      payPerHour: body.payPerHour ?? undefined,
+      skillsRequired: mergedSkills,
+      experienceRequired: body.experienceRequired ?? 0,
+      recruiterName: body.recruiterName || "",
+      recruiterPhone: body.recruiterPhone || "",
+      vendorId: req.user!.userId,
+      vendorEmail: req.user!.email,
+      sourceUserId: req.user!.userId,
+      sourceCompanyId: posterCompany?._id ?? undefined,
     });
 
-    res.status(201).json(jobToJSON(job));
+    res.status(201).json(jobToJSON(job.toObject()));
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: err.errors[0]?.message });
@@ -308,13 +302,13 @@ export async function getJob(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    const job = await Job.findById(req.params.id).lean();
     if (!job) {
       res.status(404).json({ error: "Job not found" });
       return;
     }
-    const count = await prisma.application.count({
-      where: { jobId: req.params.id },
+    const count = await Application.countDocuments({
+      jobId: req.params.id,
     });
     const result = jobToJSON(job);
     result.application_count = count;
@@ -331,31 +325,29 @@ export async function applyToJob(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    const job = await Job.findById(req.params.id).lean();
     if (!job?.isActive) {
       res.status(404).json({ error: "Job not found or inactive" });
       return;
     }
 
     try {
-      const app = await prisma.application.create({
-        data: {
-          jobId: req.params.id,
-          jobTitle: job.title,
-          candidateId: req.user!.userId,
-          candidateEmail: req.user!.email,
-          coverLetter: req.body.coverLetter || req.body.cover_letter || "",
-        },
+      const app = await Application.create({
+        jobId: req.params.id,
+        jobTitle: job.title,
+        candidateId: req.user!.userId,
+        candidateEmail: req.user!.email,
+        coverLetter: req.body.coverLetter || req.body.cover_letter || "",
       });
 
-      await prisma.job.update({
-        where: { id: req.params.id },
-        data: { applicationCount: { increment: 1 } },
-      });
+      await Job.updateOne(
+        { _id: req.params.id },
+        { $inc: { applicationCount: 1 } },
+      );
 
-      res.status(201).json(profileToJSON(app));
-    } catch (e) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
+      res.status(201).json(profileToJSON(app.toObject()));
+    } catch (e: any) {
+      if (e.code === 11000) {
         res.status(409).json({ error: "Already applied to this job" });
         return;
       }
@@ -373,7 +365,7 @@ export async function closeJob(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    const job = await Job.findById(req.params.id).lean();
     if (!job) {
       res.status(404).json({ error: "Job not found" });
       return;
@@ -382,12 +374,13 @@ export async function closeJob(
       res.status(403).json({ error: "Not authorized to close this job" });
       return;
     }
-    const updated = await prisma.job.update({
-      where: { id: req.params.id },
-      data: { isActive: false },
-    });
-    const count = await prisma.application.count({
-      where: { jobId: req.params.id },
+    const updated = await Job.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true },
+    ).lean();
+    const count = await Application.countDocuments({
+      jobId: req.params.id,
     });
     const result = jobToJSON(updated);
     result.application_count = count;
@@ -404,7 +397,7 @@ export async function reopenJob(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    const job = await Job.findById(req.params.id).lean();
     if (!job) {
       res.status(404).json({ error: "Job not found" });
       return;
@@ -418,8 +411,9 @@ export async function reopenJob(
     const plan = req.user!.plan || "free";
     const jobLimit = JOB_POSTING_LIMITS[plan] ?? 0;
     if (Number.isFinite(jobLimit)) {
-      const activeCount = await prisma.job.count({
-        where: { vendorId: req.user!.userId, isActive: true },
+      const activeCount = await Job.countDocuments({
+        vendorId: req.user!.userId,
+        isActive: true,
       });
       if (activeCount >= jobLimit) {
         const err: AppError = new Error(
@@ -432,12 +426,13 @@ export async function reopenJob(
       }
     }
 
-    const updated = await prisma.job.update({
-      where: { id: req.params.id },
-      data: { isActive: true },
-    });
-    const count = await prisma.application.count({
-      where: { jobId: req.params.id },
+    const updated = await Job.findByIdAndUpdate(
+      req.params.id,
+      { isActive: true },
+      { new: true },
+    ).lean();
+    const count = await Application.countDocuments({
+      jobId: req.params.id,
     });
     const result = jobToJSON(updated);
     result.application_count = count;
@@ -454,10 +449,9 @@ export async function myApplications(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const apps = await prisma.application.findMany({
-      where: { candidateId: req.user!.userId },
-      orderBy: { createdAt: "desc" },
-    });
+    const apps = await Application.find({ candidateId: req.user!.userId })
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(apps.map(profileToJSON));
   } catch (err) {
     next(err);
@@ -477,13 +471,8 @@ export async function vendorJobs(
     if (wantPaginated) {
       const { page, limit, skip } = parsePagination(req.query);
       const [data, total] = await Promise.all([
-        prisma.job.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          skip,
-          take: limit,
-        }),
-        prisma.job.count({ where }),
+        Job.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+        Job.countDocuments(where),
       ]);
       res.json({
         data: data.map(jobToJSON),
@@ -493,10 +482,7 @@ export async function vendorJobs(
         totalPages: Math.ceil(total / limit),
       });
     } else {
-      const jobs = await prisma.job.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-      });
+      const jobs = await Job.find(where).sort({ createdAt: -1 }).lean();
       res.json(jobs.map(jobToJSON));
     }
   } catch (err) {
@@ -511,9 +497,9 @@ export async function getProfile(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const profile = await prisma.candidateProfile.findUnique({
-      where: { candidateId: req.user!.userId },
-    });
+    const profile = await CandidateProfile.findOne({
+      candidateId: req.user!.userId,
+    }).lean();
     if (!profile) {
       res.status(404).json({ error: "Profile not found" });
       return;
@@ -543,18 +529,16 @@ export async function createProfile(
     }
 
     try {
-      const profile = await prisma.candidateProfile.create({
-        data: {
-          ...incoming,
-          candidateId: req.user!.userId,
-          username: req.user!.username || "",
-          email: req.user!.email,
-          skills: incoming.skills || [],
-        },
+      const profile = await CandidateProfile.create({
+        ...incoming,
+        candidateId: req.user!.userId,
+        username: req.user!.username || "",
+        email: req.user!.email,
+        skills: incoming.skills || [],
       });
-      res.status(201).json(profileToJSON(profile));
-    } catch (e) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
+      res.status(201).json(profileToJSON(profile.toObject()));
+    } catch (e: any) {
+      if (e.code === 11000) {
         res
           .status(409)
           .json({ error: "Profile already exists. Use PUT to update." });
@@ -673,9 +657,9 @@ export async function updateProfile(
       incoming.visibilityConfig = rawVisibilityConfig;
     }
 
-    const existing = await prisma.candidateProfile.findUnique({
-      where: { candidateId: req.user!.userId },
-    });
+    const existing = await CandidateProfile.findOne({
+      candidateId: req.user!.userId,
+    }).lean();
 
     let updateData: any;
 
@@ -703,17 +687,19 @@ export async function updateProfile(
       updateData = buildNewProfileData(incoming);
     }
 
-    const profile = await prisma.candidateProfile.upsert({
-      where: { candidateId: req.user!.userId },
-      update: { ...updateData },
-      create: {
-        ...updateData,
-        candidateId: req.user!.userId,
-        username: req.user!.username || "",
-        email: req.user!.email,
-        skills: updateData.skills || [],
+    const profile = await CandidateProfile.findOneAndUpdate(
+      { candidateId: req.user!.userId },
+      {
+        $set: {
+          ...updateData,
+          candidateId: req.user!.userId,
+          username: req.user!.username || "",
+          email: req.user!.email,
+          skills: updateData.skills || [],
+        },
       },
-    });
+      { upsert: true, new: true },
+    ).lean();
     res.json(profileToJSON(profile));
   } catch (err) {
     next(err);
@@ -727,15 +713,15 @@ export async function deleteProfile(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const result = await prisma.candidateProfile.findUnique({
-      where: { candidateId: req.user!.userId },
-    });
+    const result = await CandidateProfile.findOne({
+      candidateId: req.user!.userId,
+    }).lean();
     if (!result) {
       res.status(404).json({ error: "Profile not found" });
       return;
     }
-    await prisma.candidateProfile.delete({
-      where: { candidateId: req.user!.userId },
+    await CandidateProfile.deleteOne({
+      candidateId: req.user!.userId,
     });
     res.json({ message: "Profile deleted successfully." });
   } catch (err) {
@@ -815,9 +801,9 @@ export async function candidateMatches(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const profile = await prisma.candidateProfile.findUnique({
-      where: { candidateId: req.user!.userId },
-    });
+    const profile = await CandidateProfile.findOne({
+      candidateId: req.user!.userId,
+    }).lean();
     if (!profile) {
       res.json(
         req.query.page === undefined
@@ -827,7 +813,7 @@ export async function candidateMatches(
       return;
     }
 
-    const jobs = await prisma.job.findMany({ where: { isActive: true } });
+    const jobs = await Job.find({ isActive: true }).lean();
     const allMatched = matchCandidateToJobs(profile as any, jobs as any);
 
     const locationFiltered = filterMatchesByCountry(
@@ -887,9 +873,9 @@ export async function vendorCandidates(
     const { job_id } = req.query as { job_id?: string };
 
     const jobWhere: any = { vendorId: req.user!.userId, isActive: true };
-    if (job_id) jobWhere.id = job_id;
+    if (job_id) jobWhere._id = job_id;
 
-    const jobs = await prisma.job.findMany({ where: jobWhere });
+    const jobs = await Job.find(jobWhere).lean();
     if (!jobs.length) {
       res.json(
         req.query.page === undefined
@@ -906,12 +892,10 @@ export async function vendorCandidates(
 
     const profileWhere: any = {};
     if (jobCountries.size > 0) {
-      profileWhere.profileCountry = { in: Array.from(jobCountries) };
+      profileWhere.profileCountry = { $in: Array.from(jobCountries) };
     }
 
-    const profiles = await prisma.candidateProfile.findMany({
-      where: profileWhere,
-    });
+    const profiles = await CandidateProfile.find(profileWhere).lean();
     const matched = matchJobsToCandidates(jobs as any, profiles as any);
 
     const wantPaginated = req.query.page !== undefined;
@@ -971,13 +955,11 @@ export async function poke(
     } = schema.parse(req.body);
 
     // -- Once-per enforcement ----------------------------------------------
-    const already = await prisma.pokeRecord.findFirst({
-      where: {
-        senderId: req.user!.userId,
-        targetId: target_id,
-        isEmail: is_email,
-      },
-    });
+    const already = await PokeRecord.findOne({
+      senderId: req.user!.userId,
+      targetId: target_id,
+      isEmail: is_email,
+    }).lean();
     if (already) {
       const action = is_email ? "emailed" : "poked";
       const target =
@@ -993,16 +975,16 @@ export async function poke(
     const pokeLimit = POKE_LIMITS[plan] ?? 5;
     if (Number.isFinite(pokeLimit)) {
       const yearMonth = new Date().toISOString().slice(0, 7);
-      const log = await prisma.pokeLog.upsert({
-        where: { userId_yearMonth: { userId: req.user!.userId, yearMonth } },
-        update: { count: { increment: 1 } },
-        create: { userId: req.user!.userId, yearMonth, count: 1 },
-      });
+      const log = await PokeLog.findOneAndUpdate(
+        { userId: req.user!.userId, yearMonth },
+        { $inc: { count: 1 } },
+        { upsert: true, new: true },
+      );
       if (log.count > pokeLimit) {
-        await prisma.pokeLog.update({
-          where: { userId_yearMonth: { userId: req.user!.userId, yearMonth } },
-          data: { count: { decrement: 1 } },
-        });
+        await PokeLog.updateOne(
+          { userId: req.user!.userId, yearMonth },
+          { $inc: { count: -1 } },
+        );
         res.status(429).json({
           error: `Monthly poke limit reached (${pokeLimit}/month on your ${plan} plan). Upgrade at /pricing to send more.`,
         });
@@ -1018,25 +1000,23 @@ export async function poke(
       subjectContext: subject_context,
       emailBody: email_body,
       pdfAttachment: pdf_attachment,
-      pdfFilename: `${to_name.replace(/\s+/g, "_")}_resume.pdf`,
+      pdfFilename: `${to_name.replaceAll(/\s+/g, "_")}_resume.pdf`,
     });
 
     // -- Persist poke record -----------------------------------------------
-    await prisma.pokeRecord.create({
-      data: {
-        senderId: req.user!.userId,
-        senderName: sender_name || "",
-        senderEmail: sender_email || req.user!.email,
-        senderType: req.user!.userType as "vendor" | "candidate",
-        targetId: target_id,
-        targetVendorId: target_vendor_id,
-        targetEmail: to_email,
-        targetName: to_name,
-        subject: subject_context,
-        isEmail: is_email,
-        jobId: job_id,
-        jobTitle: job_title,
-      },
+    await PokeRecord.create({
+      senderId: req.user!.userId,
+      senderName: sender_name || "",
+      senderEmail: sender_email || req.user!.email,
+      senderType: req.user!.userType as "vendor" | "candidate",
+      targetId: target_id,
+      targetVendorId: target_vendor_id,
+      targetEmail: to_email,
+      targetName: to_name,
+      subject: subject_context,
+      isEmail: is_email,
+      jobId: job_id,
+      jobTitle: job_title,
     });
 
     res.json({
@@ -1058,12 +1038,11 @@ export async function getPokesSent(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const records = await prisma.pokeRecord.findMany({
-      where: { senderId: req.user!.userId },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
-    res.json(records.map((r) => toSnakeCase({ ...r, id: r.id })));
+    const records = await PokeRecord.find({ senderId: req.user!.userId })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    res.json(records.map((r) => toSnakeCase({ ...r, id: r._id })));
   } catch (err) {
     next(err);
   }
@@ -1078,32 +1057,30 @@ export async function getPokesReceived(
   try {
     let records: any[];
     if (req.user!.userType === "vendor") {
-      records = await prisma.pokeRecord.findMany({
-        where: {
-          targetVendorId: req.user!.userId,
-          senderType: "candidate",
-        },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      });
+      records = await PokeRecord.find({
+        targetVendorId: req.user!.userId,
+        senderType: "candidate",
+      })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean();
     } else {
-      const profile = await prisma.candidateProfile.findUnique({
-        where: { candidateId: req.user!.userId },
-      });
+      const profile = await CandidateProfile.findOne({
+        candidateId: req.user!.userId,
+      }).lean();
       if (!profile) {
         res.json([]);
         return;
       }
-      records = await prisma.pokeRecord.findMany({
-        where: {
-          targetId: profile.id,
-          senderType: "vendor",
-        },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      });
+      records = await PokeRecord.find({
+        targetId: profile._id,
+        senderType: "vendor",
+      })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean();
     }
-    res.json(records.map((r) => toSnakeCase({ ...r, id: r.id })));
+    res.json(records.map((r) => toSnakeCase({ ...r, id: r._id })));
   } catch (err) {
     next(err);
   }
@@ -1117,9 +1094,9 @@ export async function getProfileByUsername(
 ): Promise<void> {
   try {
     const { username } = req.params;
-    const profile = await prisma.candidateProfile.findFirst({
-      where: { username },
-    });
+    const profile = await CandidateProfile.findOne({
+      username,
+    }).lean();
     if (!profile) {
       res.status(404).json({ error: "Profile not found" });
       return;
@@ -1138,9 +1115,9 @@ export async function downloadResume(
 ): Promise<void> {
   try {
     const { username } = req.params;
-    const profile = await prisma.candidateProfile.findFirst({
-      where: { username },
-    });
+    const profile = await CandidateProfile.findOne({
+      username,
+    }).lean();
     if (!profile) {
       res.status(404).json({ error: "Profile not found" });
       return;

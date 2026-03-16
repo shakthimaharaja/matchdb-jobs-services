@@ -1,0 +1,388 @@
+import mongoose from "mongoose";
+import { randomUUID } from "node:crypto";
+import { connectMongo, disconnectMongo } from "../config/mongoose";
+import {
+  Job, CandidateProfile, Application, PokeRecord, PokeLog,
+  Company, MarketerCandidate, ForwardedOpening, CompanyInvite,
+  ProjectFinancial, Timesheet, InterviewInvite,
+} from "../models";
+
+/* ================================================================== */
+/*  Shared IDs — MUST match matchdb-shell-services seed exactly        */
+/* ================================================================== */
+const ADMIN_VENDOR   = "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa";
+const ADMIN_MARKETER = "aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa";
+const ADMIN_MARKETER2 = "aaaaaaaa-0003-0003-0003-aaaaaaaaaaaa";
+
+const C1  = "cccccccc-0001-0001-0001-cccccccccccc";
+const C2  = "cccccccc-0002-0002-0002-cccccccccccc";
+const C3  = "cccccccc-0003-0003-0003-cccccccccccc";
+const C4  = "cccccccc-0004-0004-0004-cccccccccccc";
+const C5  = "cccccccc-0005-0005-0005-cccccccccccc";
+const C6  = "cccccccc-0006-0006-0006-cccccccccccc";
+const C7  = "cccccccc-0007-0007-0007-cccccccccccc";
+const C8  = "cccccccc-0008-0008-0008-cccccccccccc";
+const C9  = "cccccccc-0009-0009-0009-cccccccccccc";
+const C10 = "cccccccc-0010-0010-0010-cccccccccccc";
+
+const V2 = "vvvvvvvv-0002-0002-0002-vvvvvvvvvvvv";
+const V3 = "vvvvvvvv-0003-0003-0003-vvvvvvvvvvvv";
+
+const oid = () => new mongoose.Types.ObjectId().toString();
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
+const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000);
+
+/* ================================================================== */
+async function seed() {
+  await connectMongo();
+  console.log("🌱 Seeding matchdb-jobs database...\n");
+
+  const db = mongoose.connection.db!;
+  const existing = new Set((await db.listCollections().toArray()).map((c) => c.name));
+  for (const name of [
+    "jobs", "candidateprofiles", "applications", "pokerecords", "pokelogs",
+    "companies", "marketercandidates", "forwardedopenings", "companyinvites",
+    "projectfinancials", "timesheets", "interviewinvites",
+  ]) {
+    if (existing.has(name)) await db.dropCollection(name);
+  }
+  await Promise.all([
+    Job.createCollection(), CandidateProfile.createCollection(),
+    Application.createCollection(), PokeRecord.createCollection(),
+    PokeLog.createCollection(), Company.createCollection(),
+    MarketerCandidate.createCollection(), ForwardedOpening.createCollection(),
+    CompanyInvite.createCollection(), ProjectFinancial.createCollection(),
+    Timesheet.createCollection(), InterviewInvite.createCollection(),
+  ]);
+  console.log("  ✓ Dropped and recreated all collections");
+
+  /* ================================================================ */
+  /*  JOBS — 20 openings across 3 vendors                             */
+  /* ================================================================ */
+  const J = Array.from({ length: 20 }, () => oid());
+
+  const jobData = [
+    // ── Admin Vendor jobs (8) ──
+    { _id: J[0], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "Senior React Developer", description: "Build and maintain React-based UI for a fintech platform. Strong TypeScript, Redux, and modern CSS required.", location: "New York, NY", jobCountry: "US", jobState: "NY", jobCity: "New York", jobType: "w2", jobSubType: "salary", workMode: "hybrid", salaryMin: 140000, salaryMax: 180000, skillsRequired: ["React", "TypeScript", "Redux", "CSS", "REST APIs"], experienceRequired: 5, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[1], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "Full Stack Node.js Engineer", description: "Node.js + MongoDB stack for a SaaS product. Express, Mongoose, and cloud deployments.", location: "San Francisco, CA", jobCountry: "US", jobState: "CA", jobCity: "San Francisco", jobType: "1099", jobSubType: "hourly", workMode: "remote", payPerHour: 85, skillsRequired: ["Node.js", "MongoDB", "Express", "TypeScript", "AWS"], experienceRequired: 4, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[2], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "DevOps / Cloud Engineer", description: "CI/CD pipelines, Kubernetes clusters, and AWS infrastructure. Terraform and Docker.", location: "Austin, TX", jobCountry: "US", jobState: "TX", jobCity: "Austin", jobType: "c2c", jobSubType: "contract", workMode: "onsite", payPerHour: 95, skillsRequired: ["AWS", "Kubernetes", "Docker", "Terraform", "CI/CD"], experienceRequired: 6, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[3], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "iOS Mobile Developer", description: "Consumer iOS app using Swift and SwiftUI. App Store deployment experience a plus.", location: "Boston, MA", jobCountry: "US", jobState: "MA", jobCity: "Boston", jobType: "1099", jobSubType: "hourly", workMode: "remote", payPerHour: 75, skillsRequired: ["Swift", "SwiftUI", "iOS", "Xcode", "REST APIs"], experienceRequired: 3, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[4], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "Machine Learning Engineer", description: "Develop ML models for recommendation systems. Python, TensorFlow, and MLOps.", location: "Seattle, WA", jobCountry: "US", jobState: "WA", jobCity: "Seattle", jobType: "w2", jobSubType: "salary", workMode: "hybrid", salaryMin: 160000, salaryMax: 200000, skillsRequired: ["Python", "TensorFlow", "PyTorch", "MLOps", "SQL"], experienceRequired: 5, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[5], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "Angular Frontend Developer", description: "Enterprise Angular 17 app with RxJS, NgRx, and Material Design.", location: "Chicago, IL", jobCountry: "US", jobState: "IL", jobCity: "Chicago", jobType: "w2", jobSubType: "salary", workMode: "onsite", salaryMin: 120000, salaryMax: 155000, skillsRequired: ["Angular", "TypeScript", "RxJS", "NgRx", "CSS"], experienceRequired: 4, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[6], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "Cybersecurity Analyst", description: "Threat detection, incident response, and SIEM management. CISSP preferred.", location: "Washington, DC", jobCountry: "US", jobState: "DC", jobCity: "Washington", jobType: "w2", jobSubType: "salary", workMode: "onsite", salaryMin: 130000, salaryMax: 170000, skillsRequired: ["SIEM", "Incident Response", "Penetration Testing", "Python", "Network Security"], experienceRequired: 5, isActive: true, sourceUserId: ADMIN_VENDOR },
+    { _id: J[7], vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", recruiterName: "Admin Vendor", recruiterPhone: "555-100-0001", title: "UI/UX Designer (Contract)", description: "Design user interfaces and prototypes in Figma for a B2B SaaS product.", location: "Remote", jobCountry: "US", jobState: "", jobCity: "", jobType: "1099", jobSubType: "contract", workMode: "remote", payPerHour: 65, skillsRequired: ["Figma", "UI Design", "UX Research", "Prototyping", "Design Systems"], experienceRequired: 3, isActive: false, sourceUserId: ADMIN_VENDOR },
+
+    // ── Frank Miller (V2) jobs (7) ──
+    { _id: J[8],  vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "Python Data Engineer", description: "ETL pipelines and data models using Python, Spark, and Airflow.", location: "Chicago, IL", jobCountry: "US", jobState: "IL", jobCity: "Chicago", jobType: "w2", jobSubType: "salary", workMode: "hybrid", salaryMin: 130000, salaryMax: 165000, skillsRequired: ["Python", "Apache Spark", "Airflow", "SQL", "AWS"], experienceRequired: 4, isActive: true, sourceUserId: V2 },
+    { _id: J[9],  vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "QA Automation Lead", description: "Selenium, Playwright, and API testing. Quality gates in CI/CD workflows.", location: "Seattle, WA", jobCountry: "US", jobState: "WA", jobCity: "Seattle", jobType: "w2", jobSubType: "salary", workMode: "remote", salaryMin: 120000, salaryMax: 150000, skillsRequired: ["Selenium", "Playwright", "Jest", "CI/CD", "TypeScript"], experienceRequired: 5, isActive: true, sourceUserId: V2 },
+    { _id: J[10], vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "Java Backend Developer", description: "Microservices using Spring Boot on Kubernetes. Java 17+ and PostgreSQL.", location: "Dallas, TX", jobCountry: "US", jobState: "TX", jobCity: "Dallas", jobType: "c2c", jobSubType: "contract", workMode: "hybrid", payPerHour: 90, skillsRequired: ["Java", "Spring Boot", "Kubernetes", "PostgreSQL", "Microservices"], experienceRequired: 5, isActive: true, sourceUserId: V2 },
+    { _id: J[11], vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "Cloud Solutions Architect", description: "Design and implement multi-cloud architectures (AWS/Azure). Lead migration projects.", location: "Denver, CO", jobCountry: "US", jobState: "CO", jobCity: "Denver", jobType: "w2", jobSubType: "salary", workMode: "remote", salaryMin: 170000, salaryMax: 210000, skillsRequired: ["AWS", "Azure", "Terraform", "Architecture", "Microservices"], experienceRequired: 8, isActive: true, sourceUserId: V2 },
+    { _id: J[12], vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "React Native Mobile Dev", description: "Cross-platform mobile app development with React Native and Expo.", location: "Atlanta, GA", jobCountry: "US", jobState: "GA", jobCity: "Atlanta", jobType: "1099", jobSubType: "hourly", workMode: "remote", payPerHour: 70, skillsRequired: ["React Native", "TypeScript", "Expo", "Redux", "REST APIs"], experienceRequired: 3, isActive: true, sourceUserId: V2 },
+    { _id: J[13], vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "Salesforce Developer", description: "Apex, Visualforce, and Lightning components. Salesforce certifications preferred.", location: "Miami, FL", jobCountry: "US", jobState: "FL", jobCity: "Miami", jobType: "c2c", jobSubType: "contract", workMode: "hybrid", payPerHour: 80, skillsRequired: ["Salesforce", "Apex", "Lightning", "SOQL", "JavaScript"], experienceRequired: 4, isActive: true, sourceUserId: V2 },
+    { _id: J[14], vendorId: V2, vendorEmail: "frank.miller@test.com", recruiterName: "Frank Miller", recruiterPhone: "555-200-0002", title: "Blockchain Developer", description: "Smart contracts with Solidity and web3.js. Experience with DeFi protocols.", location: "Remote", jobCountry: "US", jobState: "", jobCity: "", jobType: "1099", jobSubType: "hourly", workMode: "remote", payPerHour: 100, skillsRequired: ["Solidity", "Web3.js", "Ethereum", "Rust", "DeFi"], experienceRequired: 3, isActive: false, sourceUserId: V2 },
+
+    // ── Sarah Lee (V3) jobs (5) ──
+    { _id: J[15], vendorId: V3, vendorEmail: "sarah.lee@test.com", recruiterName: "Sarah Lee", recruiterPhone: "555-300-0003", title: "Staff Backend Engineer (Go)", description: "High-throughput services in Go. gRPC, Kafka, and distributed systems.", location: "San Jose, CA", jobCountry: "US", jobState: "CA", jobCity: "San Jose", jobType: "w2", jobSubType: "salary", workMode: "hybrid", salaryMin: 180000, salaryMax: 230000, skillsRequired: ["Go", "gRPC", "Kafka", "Distributed Systems", "PostgreSQL"], experienceRequired: 7, isActive: true, sourceUserId: V3 },
+    { _id: J[16], vendorId: V3, vendorEmail: "sarah.lee@test.com", recruiterName: "Sarah Lee", recruiterPhone: "555-300-0003", title: "Data Analyst", description: "SQL and BI dashboards. Tableau, Looker, and Python for data insights.", location: "Portland, OR", jobCountry: "US", jobState: "OR", jobCity: "Portland", jobType: "w2", jobSubType: "salary", workMode: "remote", salaryMin: 90000, salaryMax: 120000, skillsRequired: ["SQL", "Tableau", "Python", "Looker", "Excel"], experienceRequired: 2, isActive: true, sourceUserId: V3 },
+    { _id: J[17], vendorId: V3, vendorEmail: "sarah.lee@test.com", recruiterName: "Sarah Lee", recruiterPhone: "555-300-0003", title: "Site Reliability Engineer", description: "Monitoring, alerting, runbooks. Prometheus, Grafana, PagerDuty.", location: "Austin, TX", jobCountry: "US", jobState: "TX", jobCity: "Austin", jobType: "c2c", jobSubType: "contract", workMode: "onsite", payPerHour: 88, skillsRequired: ["Prometheus", "Grafana", "Linux", "Kubernetes", "Python"], experienceRequired: 5, isActive: true, sourceUserId: V3 },
+    { _id: J[18], vendorId: V3, vendorEmail: "sarah.lee@test.com", recruiterName: "Sarah Lee", recruiterPhone: "555-300-0003", title: "Technical Product Manager", description: "Own the product roadmap for a developer tools platform. Agile/Scrum.", location: "New York, NY", jobCountry: "US", jobState: "NY", jobCity: "New York", jobType: "w2", jobSubType: "salary", workMode: "hybrid", salaryMin: 150000, salaryMax: 185000, skillsRequired: ["Product Management", "Agile", "Scrum", "JIRA", "SQL"], experienceRequired: 6, isActive: true, sourceUserId: V3 },
+    { _id: J[19], vendorId: V3, vendorEmail: "sarah.lee@test.com", recruiterName: "Sarah Lee", recruiterPhone: "555-300-0003", title: "Embedded Systems Engineer", description: "Firmware for IoT devices. C/C++, RTOS, and BLE communication.", location: "San Diego, CA", jobCountry: "US", jobState: "CA", jobCity: "San Diego", jobType: "w2", jobSubType: "salary", workMode: "onsite", salaryMin: 135000, salaryMax: 165000, skillsRequired: ["C", "C++", "RTOS", "Embedded Systems", "BLE"], experienceRequired: 5, isActive: true, sourceUserId: V3 },
+  ];
+
+  const jobs = await Job.insertMany(jobData);
+  console.log(`  ✓ Created ${jobs.length} jobs`);
+
+  /* ================================================================ */
+  /*  CANDIDATE PROFILES — 10                                          */
+  /* ================================================================ */
+  const COMPANY_ID = oid();
+  const COMPANY2_ID = oid();
+
+  const profiles = await CandidateProfile.insertMany([
+    { _id: oid(), candidateId: C1, username: "alice-johnson-c00001", name: "Alice Johnson", email: "alice.johnson@test.com", phone: "555-001-0001", currentCompany: "TechCorp", currentRole: "Senior Frontend Engineer", preferredJobType: "w2", expectedHourlyRate: 80, experienceYears: 6, skills: ["React", "TypeScript", "Redux", "Node.js", "CSS", "GraphQL"], location: "New York, NY", profileCountry: "US", bio: "Passionate frontend developer with 6 years of experience building scalable web apps.", resumeSummary: "Frontend specialist in React/TypeScript delivering high-quality UIs at scale.", resumeExperience: "TechCorp (2021–present): Senior Frontend Engineer — micro-frontends for 200k+ users.\nStartupXYZ (2018–2021): Frontend Developer — customer portal redesign.", resumeEducation: "B.S. Computer Science, NYU, 2018", resumeAchievements: "Led jQuery→React migration, 60% load-time reduction.", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", profileLocked: false },
+    { _id: oid(), candidateId: C2, username: "dave-brown-c00002", name: "Dave Brown", email: "dave.brown@test.com", phone: "555-002-0002", currentCompany: "DataWorks Inc.", currentRole: "Data Engineer", preferredJobType: "w2", expectedHourlyRate: 75, experienceYears: 4, skills: ["Python", "Apache Spark", "Airflow", "SQL", "AWS", "Docker"], location: "Chicago, IL", profileCountry: "US", bio: "Data engineer focused on ETL pipelines and analytics infrastructure.", resumeSummary: "4 years building scalable ETL pipelines and data warehouses.", resumeExperience: "DataWorks (2022–present): Spark pipelines processing 5 TB daily.\nAnalyticsCo (2020–2022): Airflow DAGs for automated reporting.", resumeEducation: "M.S. Data Science, University of Chicago, 2020", resumeAchievements: "Reduced pipeline runtime by 40% via query optimization.", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", profileLocked: false },
+    { _id: oid(), candidateId: C3, username: "emma-davis-c00003", name: "Emma Davis", email: "emma.davis@test.com", phone: "555-003-0003", currentCompany: "CloudFirst", currentRole: "DevOps Engineer", preferredJobType: "c2c", expectedHourlyRate: 90, experienceYears: 7, skills: ["AWS", "Kubernetes", "Docker", "Terraform", "CI/CD", "Python", "Linux"], location: "Austin, TX", profileCountry: "US", bio: "DevOps specialist: AWS, Kubernetes, infrastructure-as-code.", resumeSummary: "7 years of cloud infrastructure, container orchestration, and automation.", resumeExperience: "CloudFirst (2020–present): Senior DevOps — K8s clusters across 3 AWS regions.\nInfraTeam (2017–2020): CI/CD with Jenkins and GitLab CI.", resumeEducation: "B.S. Computer Engineering, UT Austin, 2017", resumeAchievements: "99.99% uptime SLA for 2 consecutive years.", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", profileLocked: false },
+    { _id: oid(), candidateId: C4, username: "rahul-sharma-c00004", name: "Rahul Sharma", email: "rahul.sharma@test.com", phone: "555-004-0004", currentCompany: "InnoSoft", currentRole: "Full Stack Developer", preferredJobType: "w2", expectedHourlyRate: 70, experienceYears: 5, skills: ["React", "Node.js", "TypeScript", "MongoDB", "Express", "AWS", "Docker"], location: "San Francisco, CA", profileCountry: "US", bio: "Full-stack engineer adept at building end-to-end web applications.", resumeSummary: "5 years building MERN-stack applications with cloud deployments.", resumeExperience: "InnoSoft (2021–present): Full Stack Dev — built microservices architecture.\nWebDev Co (2019–2021): React/Node developer.", resumeEducation: "B.Tech Computer Science, IIT Bombay, 2019", resumeAchievements: "Designed caching layer reducing API response time by 70%.", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", profileLocked: false },
+    { _id: oid(), candidateId: C5, username: "priya-patel-c00005", name: "Priya Patel", email: "priya.patel@test.com", phone: "555-005-0005", currentCompany: "HealthTech Solutions", currentRole: "QA Lead", preferredJobType: "w2", expectedHourlyRate: 65, experienceYears: 6, skills: ["Selenium", "Playwright", "Jest", "CI/CD", "TypeScript", "Cypress", "API Testing"], location: "Seattle, WA", profileCountry: "US", bio: "QA automation lead with passion for shifting quality left.", resumeSummary: "6 years leading test automation for enterprise web and mobile apps.", resumeExperience: "HealthTech (2021–present): QA Lead — Playwright framework for 3 product lines.\nTestPro (2018–2021): Automation Engineer — Selenium + API testing.", resumeEducation: "M.S. Software Engineering, University of Washington, 2018", resumeAchievements: "Reduced regression cycle from 8 hrs to 45 min with parallel tests.", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", profileLocked: false },
+    { _id: oid(), candidateId: C6, username: "james-wilson-c00006", name: "James Wilson", email: "james.wilson@test.com", phone: "555-006-0006", currentCompany: "FinanceAI", currentRole: "ML Engineer", preferredJobType: "w2", expectedHourlyRate: 95, experienceYears: 5, skills: ["Python", "TensorFlow", "PyTorch", "MLOps", "SQL", "Kubernetes", "Scikit-learn"], location: "Seattle, WA", profileCountry: "US", bio: "ML engineer specializing in recommendation systems and NLP.", resumeSummary: "5 years building and deploying ML models at scale.", resumeExperience: "FinanceAI (2022–present): ML Engineer — built fraud-detection model (98.7% recall).\nDataLab (2020–2022): Data Scientist — NLP pipeline for document classification.", resumeEducation: "M.S. Machine Learning, Stanford University, 2020", resumeAchievements: "Patent pending on novel fraud-detection ensemble method.", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", profileLocked: false },
+    { _id: oid(), candidateId: C7, username: "sophia-martinez-c00007", name: "Sophia Martinez", email: "sophia.martinez@test.com", phone: "555-007-0007", currentCompany: "SecureNet", currentRole: "Security Engineer", preferredJobType: "w2", expectedHourlyRate: 85, experienceYears: 6, skills: ["SIEM", "Incident Response", "Penetration Testing", "Python", "Network Security", "AWS Security"], location: "Washington, DC", profileCountry: "US", bio: "Cybersecurity professional protecting enterprise infrastructure.", resumeSummary: "6 years in cybersecurity covering SOC, pen testing, and cloud security.", resumeExperience: "SecureNet (2020–present): Security Engineer — managed SIEM for 500-node network.\nCyberShield (2018–2020): SOC Analyst — incident response and threat hunting.", resumeEducation: "B.S. Cybersecurity, Georgetown University, 2018", resumeAchievements: "CISSP and CEH certified. Led response to zero-day incident with zero data loss.", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", profileLocked: false },
+    { _id: oid(), candidateId: C8, username: "liam-chen-c00008", name: "Liam Chen", email: "liam.chen@test.com", phone: "555-008-0008", currentCompany: "GoSystems", currentRole: "Senior Backend Engineer", preferredJobType: "w2", expectedHourlyRate: 90, experienceYears: 8, skills: ["Go", "gRPC", "Kafka", "PostgreSQL", "Distributed Systems", "Docker", "Kubernetes"], location: "San Jose, CA", profileCountry: "US", bio: "Backend engineer specializing in high-throughput distributed systems in Go.", resumeSummary: "8 years building low-latency backend services processing millions of events.", resumeExperience: "GoSystems (2020–present): Senior BE — Go microservices handling 50k RPS.\nScaleCo (2017–2020): Backend Dev — Kafka-based event streaming platform.", resumeEducation: "M.S. Computer Science, UC Berkeley, 2017", resumeAchievements: "Designed event pipeline reducing p99 latency from 200ms to 12ms.", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", profileLocked: false },
+    { _id: oid(), candidateId: C9, username: "nina-gupta-c00009", name: "Nina Gupta", email: "nina.gupta@test.com", phone: "555-009-0009", currentCompany: "DesignHub", currentRole: "Product Designer", preferredJobType: "1099", expectedHourlyRate: 65, experienceYears: 4, skills: ["Figma", "UI Design", "UX Research", "Prototyping", "Design Systems", "HTML", "CSS"], location: "Portland, OR", profileCountry: "US", bio: "Product designer bridging user research and pixel-perfect implementation.", resumeSummary: "4 years designing B2B SaaS products from research to handoff.", resumeExperience: "DesignHub (2022–present): Product Designer — design system serving 12 product teams.\nPixelCraft (2020–2022): UI/UX Designer — e-commerce redesign boosting conversion 25%.", resumeEducation: "BFA Interaction Design, RISD, 2020", resumeAchievements: "Design system adopted by 12 teams, 40% faster feature delivery.", companyId: "", companyName: "", profileLocked: false },
+    { _id: oid(), candidateId: C10, username: "omar-hassan-c00010", name: "Omar Hassan", email: "omar.hassan@test.com", phone: "555-010-0010", currentCompany: "SRE Corp", currentRole: "Site Reliability Engineer", preferredJobType: "c2c", expectedHourlyRate: 88, experienceYears: 6, skills: ["Prometheus", "Grafana", "Linux", "Kubernetes", "Python", "Terraform", "AWS"], location: "Austin, TX", profileCountry: "US", bio: "SRE focused on observability, reliability, and infrastructure automation.", resumeSummary: "6 years running production Kubernetes at scale with 99.99% availability.", resumeExperience: "SRE Corp (2021–present): Senior SRE — Prometheus/Grafana for 200+ services.\nInfraOps (2018–2021): SRE — built Terraform modules for multi-account AWS.", resumeEducation: "B.S. Computer Science, UT Dallas, 2018", resumeAchievements: "Reduced MTTR from 45 min to 8 min via automated runbooks.", companyId: "", companyName: "", profileLocked: false },
+  ]);
+  console.log(`  ✓ Created ${profiles.length} candidate profiles`);
+
+  /* ================================================================ */
+  /*  APPLICATIONS — multiple candidates × multiple jobs               */
+  /* ================================================================ */
+  const A = Array.from({ length: 16 }, () => oid());
+
+  const applications = await Application.insertMany([
+    // Alice → 3 jobs
+    { _id: A[0], jobId: J[0], jobTitle: "Senior React Developer",       candidateId: C1, candidateEmail: "alice.johnson@test.com",   coverLetter: "6 years of React/TS experience — strong fit for this role.", status: "accepted" },
+    { _id: A[1], jobId: J[1], jobTitle: "Full Stack Node.js Engineer",  candidateId: C1, candidateEmail: "alice.johnson@test.com",   coverLetter: "Experienced with Node.js + MongoDB full-stack.", status: "reviewed" },
+    { _id: A[2], jobId: J[5], jobTitle: "Angular Frontend Developer",   candidateId: C1, candidateEmail: "alice.johnson@test.com",   coverLetter: "Angular and React share many patterns — I can ramp up fast.", status: "pending" },
+    // Dave → 2 jobs
+    { _id: A[3], jobId: J[8], jobTitle: "Python Data Engineer",         candidateId: C2, candidateEmail: "dave.brown@test.com",      coverLetter: "Python + Spark is my core skill set.", status: "accepted" },
+    { _id: A[4], jobId: J[16], jobTitle: "Data Analyst",                candidateId: C2, candidateEmail: "dave.brown@test.com",      coverLetter: "Strong SQL and Python background.", status: "pending" },
+    // Emma → 2 jobs
+    { _id: A[5], jobId: J[2], jobTitle: "DevOps / Cloud Engineer",      candidateId: C3, candidateEmail: "emma.davis@test.com",      coverLetter: "AWS + K8s + Terraform — exactly my stack.", status: "accepted" },
+    { _id: A[6], jobId: J[17], jobTitle: "Site Reliability Engineer",   candidateId: C3, candidateEmail: "emma.davis@test.com",      coverLetter: "SRE and DevOps overlap heavily with my experience.", status: "reviewed" },
+    // Rahul → 2 jobs
+    { _id: A[7], jobId: J[1], jobTitle: "Full Stack Node.js Engineer",  candidateId: C4, candidateEmail: "rahul.sharma@test.com",    coverLetter: "MERN stack is my primary expertise.", status: "accepted" },
+    { _id: A[8], jobId: J[12], jobTitle: "React Native Mobile Dev",    candidateId: C4, candidateEmail: "rahul.sharma@test.com",    coverLetter: "React Native with TypeScript — built 2 production apps.", status: "pending" },
+    // Priya → 1 job
+    { _id: A[9], jobId: J[9], jobTitle: "QA Automation Lead",           candidateId: C5, candidateEmail: "priya.patel@test.com",     coverLetter: "Leading QA automation is exactly what I do.", status: "accepted" },
+    // James → 1 job
+    { _id: A[10], jobId: J[4], jobTitle: "Machine Learning Engineer",   candidateId: C6, candidateEmail: "james.wilson@test.com",    coverLetter: "ML at scale with TensorFlow and MLOps.", status: "accepted" },
+    // Sophia → 1 job
+    { _id: A[11], jobId: J[6], jobTitle: "Cybersecurity Analyst",       candidateId: C7, candidateEmail: "sophia.martinez@test.com", coverLetter: "CISSP + 6 years of security experience.", status: "accepted" },
+    // Liam → 2 jobs
+    { _id: A[12], jobId: J[15], jobTitle: "Staff Backend Engineer (Go)",candidateId: C8, candidateEmail: "liam.chen@test.com",       coverLetter: "Go + distributed systems is my specialization.", status: "accepted" },
+    { _id: A[13], jobId: J[10], jobTitle: "Java Backend Developer",     candidateId: C8, candidateEmail: "liam.chen@test.com",       coverLetter: "I can do Java/Spring Boot alongside Go.", status: "reviewed" },
+    // Nina → 1 job
+    { _id: A[14], jobId: J[7], jobTitle: "UI/UX Designer (Contract)",   candidateId: C9, candidateEmail: "nina.gupta@test.com",      coverLetter: "Figma + design systems is my forte.", status: "pending" },
+    // Omar → 1 job
+    { _id: A[15], jobId: J[17], jobTitle: "Site Reliability Engineer",  candidateId: C10, candidateEmail: "omar.hassan@test.com",    coverLetter: "Prometheus/Grafana/K8s — this is what I do daily.", status: "accepted" },
+  ]);
+  console.log(`  ✓ Created ${applications.length} applications`);
+
+  // Update application counts on jobs
+  const appCounts: Record<string, number> = {};
+  for (const a of applications) { appCounts[a.jobId] = (appCounts[a.jobId] ?? 0) + 1; }
+  await Promise.all(Object.entries(appCounts).map(([jid, count]) => Job.updateOne({ _id: jid }, { applicationCount: count })));
+
+  /* ================================================================ */
+  /*  COMPANIES — 2                                                    */
+  /* ================================================================ */
+  const companies = await Company.insertMany([
+    { _id: COMPANY_ID,  name: "Alpha Staffing Solutions", marketerId: ADMIN_MARKETER,  marketerEmail: "admin@marketer.com" },
+    { _id: COMPANY2_ID, name: "Beta Tech Partners",      marketerId: ADMIN_MARKETER2, marketerEmail: "admin@markerter.com" },
+  ]);
+  console.log(`  ✓ Created ${companies.length} companies`);
+
+  /* ================================================================ */
+  /*  MARKETER-CANDIDATE links — all 10 candidates across 2 companies  */
+  /* ================================================================ */
+  const candidateInfo: [string, string, string, string][] = [
+    [C1, "Alice Johnson",    "alice.johnson@test.com",   "accepted"],
+    [C2, "Dave Brown",       "dave.brown@test.com",      "accepted"],
+    [C3, "Emma Davis",       "emma.davis@test.com",      "accepted"],
+    [C4, "Rahul Sharma",     "rahul.sharma@test.com",    "accepted"],
+    [C5, "Priya Patel",      "priya.patel@test.com",     "accepted"],
+    [C6, "James Wilson",     "james.wilson@test.com",    "accepted"],
+    [C7, "Sophia Martinez",  "sophia.martinez@test.com", "accepted"],
+    [C8, "Liam Chen",        "liam.chen@test.com",       "accepted"],
+    [C9, "Nina Gupta",       "nina.gupta@test.com",      "pending"],
+    [C10, "Omar Hassan",     "omar.hassan@test.com",     "pending"],
+  ];
+
+  const mcRecords = await MarketerCandidate.insertMany([
+    // Alpha Staffing (admin@marketer.com) — 7 candidates
+    ...candidateInfo.slice(0, 5).map(([cid, name, email, status]) => ({
+      _id: oid(), companyId: COMPANY_ID, marketerId: ADMIN_MARKETER, candidateId: cid,
+      candidateName: name, candidateEmail: email, inviteStatus: status,
+    })),
+    // Pending invite with token
+    { _id: oid(), companyId: COMPANY_ID, marketerId: ADMIN_MARKETER, candidateId: "", candidateName: "Nina Gupta", candidateEmail: "nina.gupta@test.com", inviteStatus: "pending", inviteToken: randomUUID(), inviteSentAt: daysAgo(2) },
+    { _id: oid(), companyId: COMPANY_ID, marketerId: ADMIN_MARKETER, candidateId: "", candidateName: "Omar Hassan", candidateEmail: "omar.hassan@test.com", inviteStatus: "pending", inviteToken: randomUUID(), inviteSentAt: daysAgo(1) },
+
+    // Beta Tech Partners (admin@markerter.com) — 5 candidates
+    ...candidateInfo.slice(5, 8).map(([cid, name, email, status]) => ({
+      _id: oid(), companyId: COMPANY2_ID, marketerId: ADMIN_MARKETER2, candidateId: cid,
+      candidateName: name, candidateEmail: email, inviteStatus: status,
+    })),
+    { _id: oid(), companyId: COMPANY2_ID, marketerId: ADMIN_MARKETER2, candidateId: "", candidateName: "Nina Gupta", candidateEmail: "nina.gupta@test.com", inviteStatus: "pending", inviteToken: randomUUID(), inviteSentAt: daysAgo(3) },
+    { _id: oid(), companyId: COMPANY2_ID, marketerId: ADMIN_MARKETER2, candidateId: C10, candidateName: "Omar Hassan", candidateEmail: "omar.hassan@test.com", inviteStatus: "accepted" },
+  ]);
+  console.log(`  ✓ Created ${mcRecords.length} marketer-candidate records`);
+
+  /* ================================================================ */
+  /*  COMPANY INVITES                                                  */
+  /* ================================================================ */
+  const invites = await CompanyInvite.insertMany([
+    { _id: oid(), companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", candidateEmail: "nina.gupta@test.com", candidateName: "Nina Gupta", offerNote: "Join our bench — great DevOps & design opportunities!", status: "pending", expiresAt: daysFromNow(7) },
+    { _id: oid(), companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", candidateEmail: "omar.hassan@test.com", candidateName: "Omar Hassan", offerNote: "We have SRE roles lined up for you.", status: "pending", expiresAt: daysFromNow(7) },
+    { _id: oid(), companyId: COMPANY2_ID, companyName: "Beta Tech Partners", marketerId: ADMIN_MARKETER2, marketerEmail: "admin@markerter.com", candidateEmail: "nina.gupta@test.com", candidateName: "Nina Gupta", offerNote: "Exciting design contracts available!", status: "pending", expiresAt: daysFromNow(14) },
+  ]);
+  console.log(`  ✓ Created ${invites.length} company invites`);
+
+  /* ================================================================ */
+  /*  FORWARDED OPENINGS — marketers forward jobs to their candidates   */
+  /* ================================================================ */
+  const forwarded = await ForwardedOpening.insertMany([
+    // Alpha Staffing forwards
+    { _id: oid(), marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", candidateEmail: "alice.johnson@test.com", candidateName: "Alice Johnson", jobId: J[0], jobTitle: "Senior React Developer", jobLocation: "New York, NY", jobType: "w2", jobSubType: "salary", vendorEmail: "admin@vendor.com", skillsRequired: ["React", "TypeScript", "Redux"], salaryMin: 140000, salaryMax: 180000, note: "Perfect match for Alice.", status: "accepted" },
+    { _id: oid(), marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", candidateEmail: "dave.brown@test.com", candidateName: "Dave Brown", jobId: J[8], jobTitle: "Python Data Engineer", jobLocation: "Chicago, IL", jobType: "w2", jobSubType: "salary", vendorEmail: "frank.miller@test.com", skillsRequired: ["Python", "Spark", "Airflow"], salaryMin: 130000, salaryMax: 165000, note: "Great data engineering fit.", status: "accepted" },
+    { _id: oid(), marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", candidateEmail: "emma.davis@test.com", candidateName: "Emma Davis", jobId: J[2], jobTitle: "DevOps / Cloud Engineer", jobLocation: "Austin, TX", jobType: "c2c", jobSubType: "contract", vendorEmail: "admin@vendor.com", skillsRequired: ["AWS", "Kubernetes", "Terraform"], payPerHour: 95, note: "Emma's DevOps background is ideal.", status: "accepted" },
+    { _id: oid(), marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", candidateEmail: "rahul.sharma@test.com", candidateName: "Rahul Sharma", jobId: J[1], jobTitle: "Full Stack Node.js Engineer", jobLocation: "San Francisco, CA", jobType: "1099", jobSubType: "hourly", vendorEmail: "admin@vendor.com", skillsRequired: ["Node.js", "MongoDB", "TypeScript"], payPerHour: 85, note: "Rahul is a strong MERN developer.", status: "pending" },
+    { _id: oid(), marketerId: ADMIN_MARKETER, marketerEmail: "admin@marketer.com", companyId: COMPANY_ID, companyName: "Alpha Staffing Solutions", candidateEmail: "priya.patel@test.com", candidateName: "Priya Patel", jobId: J[9], jobTitle: "QA Automation Lead", jobLocation: "Seattle, WA", jobType: "w2", jobSubType: "salary", vendorEmail: "frank.miller@test.com", skillsRequired: ["Selenium", "Playwright", "CI/CD"], salaryMin: 120000, salaryMax: 150000, note: "Priya leads QA excellently.", status: "accepted" },
+
+    // Beta Tech Partners forwards
+    { _id: oid(), marketerId: ADMIN_MARKETER2, marketerEmail: "admin@markerter.com", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", candidateEmail: "james.wilson@test.com", candidateName: "James Wilson", jobId: J[4], jobTitle: "Machine Learning Engineer", jobLocation: "Seattle, WA", jobType: "w2", jobSubType: "salary", vendorEmail: "admin@vendor.com", skillsRequired: ["Python", "TensorFlow", "MLOps"], salaryMin: 160000, salaryMax: 200000, note: "James is a top ML talent.", status: "accepted" },
+    { _id: oid(), marketerId: ADMIN_MARKETER2, marketerEmail: "admin@markerter.com", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", candidateEmail: "sophia.martinez@test.com", candidateName: "Sophia Martinez", jobId: J[6], jobTitle: "Cybersecurity Analyst", jobLocation: "Washington, DC", jobType: "w2", jobSubType: "salary", vendorEmail: "admin@vendor.com", skillsRequired: ["SIEM", "Penetration Testing", "Python"], salaryMin: 130000, salaryMax: 170000, note: "CISSP certified — great fit.", status: "accepted" },
+    { _id: oid(), marketerId: ADMIN_MARKETER2, marketerEmail: "admin@markerter.com", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", candidateEmail: "liam.chen@test.com", candidateName: "Liam Chen", jobId: J[15], jobTitle: "Staff Backend Engineer (Go)", jobLocation: "San Jose, CA", jobType: "w2", jobSubType: "salary", vendorEmail: "sarah.lee@test.com", skillsRequired: ["Go", "gRPC", "Kafka", "Distributed Systems"], salaryMin: 180000, salaryMax: 230000, note: "Liam's Go expertise is exceptional.", status: "accepted" },
+    { _id: oid(), marketerId: ADMIN_MARKETER2, marketerEmail: "admin@markerter.com", companyId: COMPANY2_ID, companyName: "Beta Tech Partners", candidateEmail: "omar.hassan@test.com", candidateName: "Omar Hassan", jobId: J[17], jobTitle: "Site Reliability Engineer", jobLocation: "Austin, TX", jobType: "c2c", jobSubType: "contract", vendorEmail: "sarah.lee@test.com", skillsRequired: ["Prometheus", "Grafana", "Kubernetes"], payPerHour: 88, note: "Omar has deep SRE experience.", status: "pending" },
+  ]);
+  console.log(`  ✓ Created ${forwarded.length} forwarded openings`);
+
+  /* ================================================================ */
+  /*  POKE RECORDS — vendor↔candidate and marketer↔vendor pokes+emails */
+  /* ================================================================ */
+  const pokeData = [
+    // Vendor → Candidate POKES (in-app)
+    { senderId: ADMIN_VENDOR, senderName: "Admin Vendor", senderEmail: "admin@vendor.com", senderType: "vendor", targetId: C1, targetEmail: "alice.johnson@test.com", targetName: "Alice Johnson", subject: "Strong React profile — interested?", isEmail: false, jobId: J[0], jobTitle: "Senior React Developer" },
+    { senderId: ADMIN_VENDOR, senderName: "Admin Vendor", senderEmail: "admin@vendor.com", senderType: "vendor", targetId: C4, targetEmail: "rahul.sharma@test.com", targetName: "Rahul Sharma", subject: "Full-stack role — great fit", isEmail: false, jobId: J[1], jobTitle: "Full Stack Node.js Engineer" },
+    { senderId: ADMIN_VENDOR, senderName: "Admin Vendor", senderEmail: "admin@vendor.com", senderType: "vendor", targetId: C6, targetEmail: "james.wilson@test.com", targetName: "James Wilson", subject: "ML Engineer opportunity", isEmail: false, jobId: J[4], jobTitle: "Machine Learning Engineer" },
+    { senderId: V2, senderName: "Frank Miller", senderEmail: "frank.miller@test.com", senderType: "vendor", targetId: C2, targetEmail: "dave.brown@test.com", targetName: "Dave Brown", subject: "Data engineer role in Chicago", isEmail: false, jobId: J[8], jobTitle: "Python Data Engineer" },
+    { senderId: V2, senderName: "Frank Miller", senderEmail: "frank.miller@test.com", senderType: "vendor", targetId: C5, targetEmail: "priya.patel@test.com", targetName: "Priya Patel", subject: "QA Lead — your expertise needed", isEmail: false, jobId: J[9], jobTitle: "QA Automation Lead" },
+    { senderId: V3, senderName: "Sarah Lee", senderEmail: "sarah.lee@test.com", senderType: "vendor", targetId: C8, targetEmail: "liam.chen@test.com", targetName: "Liam Chen", subject: "Go backend role at scale", isEmail: false, jobId: J[15], jobTitle: "Staff Backend Engineer (Go)" },
+    { senderId: V3, senderName: "Sarah Lee", senderEmail: "sarah.lee@test.com", senderType: "vendor", targetId: C10, targetEmail: "omar.hassan@test.com", targetName: "Omar Hassan", subject: "SRE contract in Austin", isEmail: false, jobId: J[17], jobTitle: "Site Reliability Engineer" },
+
+    // Candidate → Vendor POKES (in-app)
+    { senderId: C1, senderName: "Alice Johnson", senderEmail: "alice.johnson@test.com", senderType: "candidate", targetId: ADMIN_VENDOR, targetVendorId: ADMIN_VENDOR, targetEmail: "admin@vendor.com", targetName: "Admin Vendor", subject: "Interested in the React role", isEmail: false, jobId: J[0], jobTitle: "Senior React Developer" },
+    { senderId: C3, senderName: "Emma Davis", senderEmail: "emma.davis@test.com", senderType: "candidate", targetId: ADMIN_VENDOR, targetVendorId: ADMIN_VENDOR, targetEmail: "admin@vendor.com", targetName: "Admin Vendor", subject: "DevOps role inquiry", isEmail: false, jobId: J[2], jobTitle: "DevOps / Cloud Engineer" },
+    { senderId: C8, senderName: "Liam Chen", senderEmail: "liam.chen@test.com", senderType: "candidate", targetId: V3, targetVendorId: V3, targetEmail: "sarah.lee@test.com", targetName: "Sarah Lee", subject: "Go role — very interested", isEmail: false, jobId: J[15], jobTitle: "Staff Backend Engineer (Go)" },
+
+    // Vendor → Candidate EMAILS
+    { senderId: ADMIN_VENDOR, senderName: "Admin Vendor", senderEmail: "admin@vendor.com", senderType: "vendor", targetId: C1, targetEmail: "alice.johnson@test.com", targetName: "Alice Johnson", subject: "Follow-up: React Developer position", isEmail: true, jobId: J[0], jobTitle: "Senior React Developer" },
+    { senderId: ADMIN_VENDOR, senderName: "Admin Vendor", senderEmail: "admin@vendor.com", senderType: "vendor", targetId: C3, targetEmail: "emma.davis@test.com", targetName: "Emma Davis", subject: "DevOps role details attached", isEmail: true, jobId: J[2], jobTitle: "DevOps / Cloud Engineer" },
+    { senderId: V2, senderName: "Frank Miller", senderEmail: "frank.miller@test.com", senderType: "vendor", targetId: C2, targetEmail: "dave.brown@test.com", targetName: "Dave Brown", subject: "Data Engineer — interview scheduling", isEmail: true, jobId: J[8], jobTitle: "Python Data Engineer" },
+    { senderId: V3, senderName: "Sarah Lee", senderEmail: "sarah.lee@test.com", senderType: "vendor", targetId: C8, targetEmail: "liam.chen@test.com", targetName: "Liam Chen", subject: "Go role — comp package details", isEmail: true, jobId: J[15], jobTitle: "Staff Backend Engineer (Go)" },
+
+    // Candidate → Vendor EMAILS
+    { senderId: C1, senderName: "Alice Johnson", senderEmail: "alice.johnson@test.com", senderType: "candidate", targetId: ADMIN_VENDOR, targetVendorId: ADMIN_VENDOR, targetEmail: "admin@vendor.com", targetName: "Admin Vendor", subject: "Re: React Developer — availability", isEmail: true, jobId: J[0], jobTitle: "Senior React Developer" },
+    { senderId: C2, senderName: "Dave Brown", senderEmail: "dave.brown@test.com", senderType: "candidate", targetId: V2, targetVendorId: V2, targetEmail: "frank.miller@test.com", targetName: "Frank Miller", subject: "Re: Data Engineer — preferred schedule", isEmail: true, jobId: J[8], jobTitle: "Python Data Engineer" },
+    { senderId: C4, senderName: "Rahul Sharma", senderEmail: "rahul.sharma@test.com", senderType: "candidate", targetId: ADMIN_VENDOR, targetVendorId: ADMIN_VENDOR, targetEmail: "admin@vendor.com", targetName: "Admin Vendor", subject: "Node.js role — portfolio link", isEmail: true, jobId: J[1], jobTitle: "Full Stack Node.js Engineer" },
+
+    // Marketer → Vendor POKES
+    { senderId: ADMIN_MARKETER, senderName: "Admin Marketer", senderEmail: "admin@marketer.com", senderType: "marketer", targetId: ADMIN_VENDOR, targetVendorId: ADMIN_VENDOR, targetEmail: "admin@vendor.com", targetName: "Admin Vendor", subject: "Candidate roster for your React opening", isEmail: false, jobId: J[0], jobTitle: "Senior React Developer" },
+    { senderId: ADMIN_MARKETER, senderName: "Admin Marketer", senderEmail: "admin@marketer.com", senderType: "marketer", targetId: V2, targetVendorId: V2, targetEmail: "frank.miller@test.com", targetName: "Frank Miller", subject: "Proposing Dave Brown for Data role", isEmail: false, jobId: J[8], jobTitle: "Python Data Engineer" },
+
+    // Marketer → Vendor EMAILS
+    { senderId: ADMIN_MARKETER, senderName: "Admin Marketer", senderEmail: "admin@marketer.com", senderType: "marketer", targetId: ADMIN_VENDOR, targetVendorId: ADMIN_VENDOR, targetEmail: "admin@vendor.com", targetName: "Admin Vendor", subject: "Candidate profiles — Alpha Staffing", isEmail: true, jobId: J[0], jobTitle: "Senior React Developer" },
+    { senderId: ADMIN_MARKETER2, senderName: "Admin Markerter", senderEmail: "admin@markerter.com", senderType: "marketer", targetId: V3, targetVendorId: V3, targetEmail: "sarah.lee@test.com", targetName: "Sarah Lee", subject: "Liam Chen for your Go backend role", isEmail: true, jobId: J[15], jobTitle: "Staff Backend Engineer (Go)" },
+  ];
+
+  const pokes = await PokeRecord.insertMany(pokeData.map((p) => ({ _id: oid(), ...p })));
+  console.log(`  ✓ Created ${pokes.length} poke records`);
+
+  /* ================================================================ */
+  /*  POKE LOGS — monthly usage                                        */
+  /* ================================================================ */
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const lastYM = now.getMonth() === 0
+    ? `${now.getFullYear() - 1}-12`
+    : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}`;
+
+  const pokeLogs = await PokeLog.insertMany([
+    { _id: oid(), userId: ADMIN_VENDOR,   yearMonth: ym,     count: 8 },
+    { _id: oid(), userId: ADMIN_VENDOR,   yearMonth: lastYM, count: 12 },
+    { _id: oid(), userId: V2,             yearMonth: ym,     count: 5 },
+    { _id: oid(), userId: V2,             yearMonth: lastYM, count: 7 },
+    { _id: oid(), userId: V3,             yearMonth: ym,     count: 4 },
+    { _id: oid(), userId: C1,             yearMonth: ym,     count: 3 },
+    { _id: oid(), userId: C2,             yearMonth: ym,     count: 2 },
+    { _id: oid(), userId: C3,             yearMonth: ym,     count: 1 },
+    { _id: oid(), userId: C4,             yearMonth: ym,     count: 1 },
+    { _id: oid(), userId: C8,             yearMonth: ym,     count: 2 },
+    { _id: oid(), userId: ADMIN_MARKETER, yearMonth: ym,     count: 5 },
+    { _id: oid(), userId: ADMIN_MARKETER, yearMonth: lastYM, count: 8 },
+    { _id: oid(), userId: ADMIN_MARKETER2,yearMonth: ym,     count: 3 },
+  ]);
+  console.log(`  ✓ Created ${pokeLogs.length} poke logs`);
+
+  /* ================================================================ */
+  /*  PROJECT FINANCIALS — 8 active/completed projects                 */
+  /* ================================================================ */
+  const financials = await ProjectFinancial.insertMany([
+    { _id: oid(), applicationId: A[0], marketerId: ADMIN_MARKETER, candidateId: C1, candidateName: "Alice Johnson", jobTitle: "Senior React Developer", vendorName: "Admin Vendor", billRate: 90, payRate: 72, hoursWorked: 480, projectStart: new Date("2025-03-01"), projectEnd: null, stateCode: "NY", stateTaxPct: 6.5, cashPct: 0, totalBilled: 43200, totalPay: 34560, taxAmount: 2246, cashAmount: 0, netPayable: 32314, amountPaid: 25000, amountPending: 7314, notes: "Ongoing — billed monthly", status: "active" },
+    { _id: oid(), applicationId: A[3], marketerId: ADMIN_MARKETER, candidateId: C2, candidateName: "Dave Brown", jobTitle: "Python Data Engineer", vendorName: "Frank Miller", billRate: 95, payRate: 75, hoursWorked: 320, projectStart: new Date("2025-06-01"), projectEnd: null, stateCode: "IL", stateTaxPct: 4.95, cashPct: 0, totalBilled: 30400, totalPay: 24000, taxAmount: 1188, cashAmount: 0, netPayable: 22812, amountPaid: 18000, amountPending: 4812, notes: "Ongoing engagement", status: "active" },
+    { _id: oid(), applicationId: A[5], marketerId: ADMIN_MARKETER, candidateId: C3, candidateName: "Emma Davis", jobTitle: "DevOps / Cloud Engineer", vendorName: "Admin Vendor", billRate: 95, payRate: 78, hoursWorked: 640, projectStart: new Date("2024-09-01"), projectEnd: new Date("2025-08-31"), stateCode: "TX", stateTaxPct: 0, cashPct: 0, totalBilled: 60800, totalPay: 49920, taxAmount: 0, cashAmount: 0, netPayable: 49920, amountPaid: 49920, amountPending: 0, notes: "Completed — fully paid", status: "completed" },
+    { _id: oid(), applicationId: A[7], marketerId: ADMIN_MARKETER, candidateId: C4, candidateName: "Rahul Sharma", jobTitle: "Full Stack Node.js Engineer", vendorName: "Admin Vendor", billRate: 85, payRate: 68, hoursWorked: 240, projectStart: new Date("2025-09-01"), projectEnd: null, stateCode: "CA", stateTaxPct: 9.3, cashPct: 2, totalBilled: 20400, totalPay: 16320, taxAmount: 1518, cashAmount: 326, netPayable: 14476, amountPaid: 10000, amountPending: 4476, notes: "Ongoing — CA taxes apply", status: "active" },
+    { _id: oid(), applicationId: A[9], marketerId: ADMIN_MARKETER, candidateId: C5, candidateName: "Priya Patel", jobTitle: "QA Automation Lead", vendorName: "Frank Miller", billRate: 80, payRate: 65, hoursWorked: 160, projectStart: new Date("2025-11-01"), projectEnd: null, stateCode: "WA", stateTaxPct: 0, cashPct: 0, totalBilled: 12800, totalPay: 10400, taxAmount: 0, cashAmount: 0, netPayable: 10400, amountPaid: 5200, amountPending: 5200, notes: "Recently started", status: "active" },
+
+    // Beta Tech Partners projects
+    { _id: oid(), applicationId: A[10], marketerId: ADMIN_MARKETER2, candidateId: C6, candidateName: "James Wilson", jobTitle: "Machine Learning Engineer", vendorName: "Admin Vendor", billRate: 110, payRate: 88, hoursWorked: 400, projectStart: new Date("2025-04-01"), projectEnd: null, stateCode: "WA", stateTaxPct: 0, cashPct: 0, totalBilled: 44000, totalPay: 35200, taxAmount: 0, cashAmount: 0, netPayable: 35200, amountPaid: 28000, amountPending: 7200, notes: "High-value ML engagement", status: "active" },
+    { _id: oid(), applicationId: A[11], marketerId: ADMIN_MARKETER2, candidateId: C7, candidateName: "Sophia Martinez", jobTitle: "Cybersecurity Analyst", vendorName: "Admin Vendor", billRate: 100, payRate: 80, hoursWorked: 480, projectStart: new Date("2025-01-15"), projectEnd: new Date("2025-12-15"), stateCode: "DC", stateTaxPct: 5.75, cashPct: 0, totalBilled: 48000, totalPay: 38400, taxAmount: 2208, cashAmount: 0, netPayable: 36192, amountPaid: 36192, amountPending: 0, notes: "Completed — full cycle", status: "completed" },
+    { _id: oid(), applicationId: A[12], marketerId: ADMIN_MARKETER2, candidateId: C8, candidateName: "Liam Chen", jobTitle: "Staff Backend Engineer (Go)", vendorName: "Sarah Lee", billRate: 120, payRate: 95, hoursWorked: 200, projectStart: new Date("2025-10-01"), projectEnd: null, stateCode: "CA", stateTaxPct: 9.3, cashPct: 0, totalBilled: 24000, totalPay: 19000, taxAmount: 1767, cashAmount: 0, netPayable: 17233, amountPaid: 9500, amountPending: 7733, notes: "Ongoing — senior Go role", status: "active" },
+  ]);
+  console.log(`  ✓ Created ${financials.length} project financials`);
+
+  /* ================================================================ */
+  /*  TIMESHEETS — multiple weeks for active project candidates        */
+  /* ================================================================ */
+  const monday = (weeksAgo: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay() + 1 - weeksAgo * 7);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const fullWeek  = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 8, sat: 0, sun: 0 };
+  const partWeek1 = { mon: 8, tue: 8, wed: 6, thu: 0, fri: 0, sat: 0, sun: 0 };
+  const partWeek2 = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 4, sat: 0, sun: 0 };
+
+  const timesheets = await Timesheet.insertMany([
+    // Alice (C1) — 4 weeks
+    { _id: oid(), candidateId: C1, candidateName: "Alice Johnson", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[0], jobTitle: "Senior React Developer", weekStart: monday(3), entries: fullWeek, totalHours: 40, status: "approved", submittedAt: daysAgo(18), approvedAt: daysAgo(17) },
+    { _id: oid(), candidateId: C1, candidateName: "Alice Johnson", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[0], jobTitle: "Senior React Developer", weekStart: monday(2), entries: fullWeek, totalHours: 40, status: "approved", submittedAt: daysAgo(11), approvedAt: daysAgo(10) },
+    { _id: oid(), candidateId: C1, candidateName: "Alice Johnson", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[0], jobTitle: "Senior React Developer", weekStart: monday(1), entries: fullWeek, totalHours: 40, status: "submitted", submittedAt: daysAgo(2) },
+    { _id: oid(), candidateId: C1, candidateName: "Alice Johnson", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[0], jobTitle: "Senior React Developer", weekStart: monday(0), entries: partWeek1, totalHours: 22, status: "draft" },
+
+    // Dave (C2) — 3 weeks
+    { _id: oid(), candidateId: C2, candidateName: "Dave Brown", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[3], jobTitle: "Python Data Engineer", weekStart: monday(2), entries: fullWeek, totalHours: 40, status: "approved", submittedAt: daysAgo(12), approvedAt: daysAgo(11) },
+    { _id: oid(), candidateId: C2, candidateName: "Dave Brown", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[3], jobTitle: "Python Data Engineer", weekStart: monday(1), entries: partWeek2, totalHours: 36, status: "submitted", submittedAt: daysAgo(3) },
+    { _id: oid(), candidateId: C2, candidateName: "Dave Brown", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[3], jobTitle: "Python Data Engineer", weekStart: monday(0), entries: partWeek1, totalHours: 22, status: "draft" },
+
+    // Rahul (C4) — 2 weeks
+    { _id: oid(), candidateId: C4, candidateName: "Rahul Sharma", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[7], jobTitle: "Full Stack Node.js Engineer", weekStart: monday(1), entries: fullWeek, totalHours: 40, status: "submitted", submittedAt: daysAgo(2) },
+    { _id: oid(), candidateId: C4, candidateName: "Rahul Sharma", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[7], jobTitle: "Full Stack Node.js Engineer", weekStart: monday(0), entries: partWeek1, totalHours: 22, status: "draft" },
+
+    // Priya (C5) — 2 weeks
+    { _id: oid(), candidateId: C5, candidateName: "Priya Patel", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[9], jobTitle: "QA Automation Lead", weekStart: monday(1), entries: fullWeek, totalHours: 40, status: "approved", submittedAt: daysAgo(5), approvedAt: daysAgo(4) },
+    { _id: oid(), candidateId: C5, candidateName: "Priya Patel", marketerId: ADMIN_MARKETER, companyId: COMPANY_ID, applicationId: A[9], jobTitle: "QA Automation Lead", weekStart: monday(0), entries: partWeek2, totalHours: 36, status: "submitted", submittedAt: daysAgo(1) },
+
+    // James (C6) — Beta Tech — 3 weeks
+    { _id: oid(), candidateId: C6, candidateName: "James Wilson", marketerId: ADMIN_MARKETER2, companyId: COMPANY2_ID, applicationId: A[10], jobTitle: "Machine Learning Engineer", weekStart: monday(2), entries: fullWeek, totalHours: 40, status: "approved", submittedAt: daysAgo(12), approvedAt: daysAgo(11) },
+    { _id: oid(), candidateId: C6, candidateName: "James Wilson", marketerId: ADMIN_MARKETER2, companyId: COMPANY2_ID, applicationId: A[10], jobTitle: "Machine Learning Engineer", weekStart: monday(1), entries: fullWeek, totalHours: 40, status: "submitted", submittedAt: daysAgo(3) },
+    { _id: oid(), candidateId: C6, candidateName: "James Wilson", marketerId: ADMIN_MARKETER2, companyId: COMPANY2_ID, applicationId: A[10], jobTitle: "Machine Learning Engineer", weekStart: monday(0), entries: partWeek1, totalHours: 22, status: "draft" },
+
+    // Liam (C8) — Beta Tech — 2 weeks
+    { _id: oid(), candidateId: C8, candidateName: "Liam Chen", marketerId: ADMIN_MARKETER2, companyId: COMPANY2_ID, applicationId: A[12], jobTitle: "Staff Backend Engineer (Go)", weekStart: monday(1), entries: fullWeek, totalHours: 40, status: "submitted", submittedAt: daysAgo(2) },
+    { _id: oid(), candidateId: C8, candidateName: "Liam Chen", marketerId: ADMIN_MARKETER2, companyId: COMPANY2_ID, applicationId: A[12], jobTitle: "Staff Backend Engineer (Go)", weekStart: monday(0), entries: partWeek1, totalHours: 22, status: "draft" },
+  ]);
+  console.log(`  ✓ Created ${timesheets.length} timesheets`);
+
+  /* ================================================================ */
+  /*  INTERVIEW INVITES — 8 interviews                                 */
+  /* ================================================================ */
+  const interviews = await InterviewInvite.insertMany([
+    { _id: oid(), vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", vendorName: "Admin Vendor", candidateEmail: "alice.johnson@test.com", candidateName: "Alice Johnson", jobId: J[0], jobTitle: "Senior React Developer", interviewDate: daysFromNow(3), interviewTime: "10:00 AM EST", interviewType: "video", interviewLink: "https://meet.example.com/react-alice", notes: "Technical round — React deep dive + system design", status: "pending" },
+    { _id: oid(), vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", vendorName: "Admin Vendor", candidateEmail: "emma.davis@test.com", candidateName: "Emma Davis", jobId: J[2], jobTitle: "DevOps / Cloud Engineer", interviewDate: daysFromNow(4), interviewTime: "2:00 PM CST", interviewType: "video", interviewLink: "https://meet.example.com/devops-emma", notes: "AWS architecture walkthrough", status: "accepted" },
+    { _id: oid(), vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", vendorName: "Admin Vendor", candidateEmail: "rahul.sharma@test.com", candidateName: "Rahul Sharma", jobId: J[1], jobTitle: "Full Stack Node.js Engineer", interviewDate: daysFromNow(5), interviewTime: "11:00 AM PST", interviewType: "phone", interviewLink: "", notes: "Initial phone screen — MERN experience", status: "pending" },
+    { _id: oid(), vendorId: V2, vendorEmail: "frank.miller@test.com", vendorName: "Frank Miller", candidateEmail: "dave.brown@test.com", candidateName: "Dave Brown", jobId: J[8], jobTitle: "Python Data Engineer", interviewDate: daysFromNow(2), interviewTime: "1:00 PM CST", interviewType: "video", interviewLink: "https://meet.example.com/data-dave", notes: "Technical: Spark + Airflow", status: "accepted" },
+    { _id: oid(), vendorId: V2, vendorEmail: "frank.miller@test.com", vendorName: "Frank Miller", candidateEmail: "priya.patel@test.com", candidateName: "Priya Patel", jobId: J[9], jobTitle: "QA Automation Lead", interviewDate: daysFromNow(6), interviewTime: "3:00 PM EST", interviewType: "video", interviewLink: "https://meet.example.com/qa-priya", notes: "QA strategy and tooling discussion", status: "pending" },
+    { _id: oid(), vendorId: V3, vendorEmail: "sarah.lee@test.com", vendorName: "Sarah Lee", candidateEmail: "liam.chen@test.com", candidateName: "Liam Chen", jobId: J[15], jobTitle: "Staff Backend Engineer (Go)", interviewDate: daysFromNow(1), interviewTime: "10:00 AM PST", interviewType: "video", interviewLink: "https://meet.example.com/go-liam", notes: "System design — distributed systems", status: "accepted" },
+    { _id: oid(), vendorId: V3, vendorEmail: "sarah.lee@test.com", vendorName: "Sarah Lee", candidateEmail: "omar.hassan@test.com", candidateName: "Omar Hassan", jobId: J[17], jobTitle: "Site Reliability Engineer", interviewDate: daysFromNow(7), interviewTime: "9:00 AM CST", interviewType: "phone", interviewLink: "", notes: "SRE practices and tooling", status: "pending" },
+    { _id: oid(), vendorId: ADMIN_VENDOR, vendorEmail: "admin@vendor.com", vendorName: "Admin Vendor", candidateEmail: "james.wilson@test.com", candidateName: "James Wilson", jobId: J[4], jobTitle: "Machine Learning Engineer", interviewDate: daysFromNow(4), interviewTime: "4:00 PM PST", interviewType: "video", interviewLink: "https://meet.example.com/ml-james", notes: "ML system design + model deployment", status: "pending" },
+  ]);
+  console.log(`  ✓ Created ${interviews.length} interview invites`);
+
+  /* ================================================================ */
+  /*  Summary                                                          */
+  /* ================================================================ */
+  console.log("\n✅ Jobs database seeded successfully!");
+  console.log(`   ${jobs.length} jobs, ${profiles.length} profiles, ${applications.length} applications`);
+  console.log(`   ${companies.length} companies, ${mcRecords.length} marketer-candidate links`);
+  console.log(`   ${pokes.length} poke records, ${pokeLogs.length} poke logs`);
+  console.log(`   ${forwarded.length} forwarded openings, ${invites.length} company invites`);
+  console.log(`   ${financials.length} project financials, ${timesheets.length} timesheets, ${interviews.length} interviews\n`);
+
+  await disconnectMongo();
+}
+
+seed().catch((err) => {
+  console.error("Seed failed:", err);
+  process.exit(1);
+});

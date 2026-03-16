@@ -1,6 +1,6 @@
 # matchdb-jobs-services
 
-Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for the MatchDB staffing platform. Uses the **same PostgreSQL database** as shell-services (generate-only — no migrations).
+Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for the MatchDB staffing platform. Uses **MongoDB Atlas** via Mongoose.
 
 ---
 
@@ -10,13 +10,13 @@ Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for t
 | ---------- | -------------------------------------------------- |
 | Runtime    | Node.js + TypeScript                               |
 | Framework  | Express 4                                          |
-| Database   | PostgreSQL via Prisma 5 (generate-only, shared DB) |
+| Database   | MongoDB Atlas via Mongoose 8                       |
 | Auth       | JWT verification (tokens issued by shell-services) |
 | Email      | SendGrid                                           |
 | Matching   | Skill-based scoring engine + skill extraction      |
 | Validation | Zod                                                |
 | Security   | Helmet, CORS, compression                          |
-| Realtime   | WebSocket (ws) — live counts & public data feeds   |
+| Realtime   | WebSocket (ws) � live counts & public data feeds   |
 
 ---
 
@@ -24,38 +24,55 @@ Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for t
 
 ```
 matchdb-jobs-services/
-├── prisma/
-│   └── schema.prisma          # Generate-only schema (8 job models — no migrations)
-├── src/
-│   ├── index.ts               # Entry point — HTTP server + WebSocket upgrade routing
-│   ├── app.ts                 # Express app (routes, middleware, Swagger)
-│   ├── config/
-│   │   ├── env.ts             # Environment variable loading & validation
-│   │   ├── prisma.ts          # Prisma client singleton
-│   │   └── swagger.ts         # OpenAPI 3.0 spec (all endpoints)
-│   ├── controllers/
-│   │   ├── jobs.controller.ts      # CRUD for jobs, profiles, applications, matching, pokes
-│   │   ├── marketer.controller.ts  # Company, roster, forwarding, invites
-│   │   ├── financials.controller.ts # Project financials, state tax rates, summaries
-│   │   └── ingest.controller.ts    # Bulk job/profile ingestion (internal)
-│   ├── middleware/
-│   │   ├── auth.middleware.ts      # JWT verification guard (reads username from token)
-│   │   └── error.middleware.ts     # Global error handler + 404
-│   ├── routes/
-│   │   ├── jobs.routes.ts         # /api/jobs/*
-│   │   └── marketer.routes.ts     # /api/marketer/*
-│   └── services/
-│       ├── matching.service.ts       # Candidate-job matching algorithm
-│       ├── skill-extractor.service.ts # Auto-extract skills from text (~150 keywords)
-│       ├── sendgrid.service.ts       # Email dispatch
-│       ├── sse.service.ts            # Server-Sent Events for live refresh
-│       ├── ws-counts.service.ts      # WebSocket /ws/counts — live job & profile counts
-│       └── ws-public-data.service.ts # WebSocket /ws/public-data — live data with diffs
-├── Dockerfile
-├── env/
-│   └── .env.local             # Local env vars
-├── package.json
-└── tsconfig.json
++-- src/
+|   +-- index.ts               # Entry point � HTTP server + WebSocket upgrade routing
+|   +-- app.ts                 # Express app (routes, middleware, Swagger)
+|   +-- config/
+|   |   +-- env.ts             # Environment variable loading & validation
+|   |   +-- mongoose.ts        # MongoDB connection (Atlas)
+|   |   +-- swagger.ts         # OpenAPI 3.0 spec (all endpoints)
+|   +-- models/
+|   |   +-- Job.ts             # Job postings
+|   |   +-- CandidateProfile.ts # Candidate resumes & profiles
+|   |   +-- Application.ts     # Job applications
+|   |   +-- PokeRecord.ts      # Poke interaction records
+|   |   +-- PokeLog.ts         # Monthly poke rate-limit tracking
+|   |   +-- Company.ts         # Marketer companies
+|   |   +-- MarketerCandidate.ts # Marketer roster
+|   |   +-- ForwardedOpening.ts # Jobs forwarded to candidates
+|   |   +-- CompanyInvite.ts   # Marketer invite tokens
+|   |   +-- ProjectFinancial.ts # Per-application financials
+|   |   +-- Timesheet.ts       # Weekly timesheets
+|   |   +-- InterviewInvite.ts # Interview scheduling
+|   |   +-- index.ts           # Barrel export
+|   +-- controllers/
+|   |   +-- jobs.controller.ts      # CRUD for jobs, profiles, applications, matching, pokes
+|   |   +-- marketer.controller.ts  # Company, roster, forwarding, invites
+|   |   +-- financials.controller.ts # Project financials, state tax rates, summaries
+|   |   +-- ingest.controller.ts    # Bulk job/profile ingestion (internal)
+|   +-- middleware/
+|   |   +-- auth.middleware.ts      # JWT verification guard
+|   |   +-- error.middleware.ts     # Global error handler + 404
+|   +-- routes/
+|   |   +-- jobs.routes.ts         # /api/jobs/*
+|   |   +-- marketer.routes.ts     # /api/marketer/*
+|   |   +-- timesheets.routes.ts   # /api/timesheets/*
+|   |   +-- interviews.routes.ts   # /api/interviews/*
+|   +-- services/
+|       +-- matching.service.ts       # Candidate-job matching algorithm
+|       +-- skill-extractor.service.ts # Auto-extract skills from text
+|       +-- sendgrid.service.ts       # Email dispatch
+|       +-- sse.service.ts            # Server-Sent Events for live refresh
+|       +-- ws-counts.service.ts      # WebSocket /ws/counts
+|       +-- ws-public-data.service.ts # WebSocket /ws/public-data
++-- Dockerfile
++-- env/
+|   +-- .env.local             # Local env vars
+|   +-- .env.development       # Dev env vars
+|   +-- .env.qa                # QA env vars
+|   +-- .env.production        # Production env vars
++-- package.json
++-- tsconfig.json
 ```
 
 ---
@@ -121,86 +138,36 @@ matchdb-jobs-services/
 | POST   | `/api/marketer/financials`                        | Marketer | Create/update project financial data |
 | DELETE | `/api/marketer/financials/:applicationId`         | Marketer | Delete project financial record      |
 
-### Candidate
-
-| Method | Path                            | Auth      | Description                   |
-| ------ | ------------------------------- | --------- | ----------------------------- |
-| GET    | `/api/jobs/candidate/forwarded` | Candidate | Forwarded openings for self   |
-| GET    | `/api/jobs/candidate/my-detail` | Candidate | Full self-detail + financials |
-
-### Company & Invites (Public / Auth)
-
-| Method | Path                             | Auth | Description          |
-| ------ | -------------------------------- | ---- | -------------------- |
-| GET    | `/api/jobs/companies`            | No   | List all companies   |
-| GET    | `/api/jobs/companies/search`     | No   | Fuzzy company search |
-| GET    | `/api/jobs/invite/:token`        | No   | Verify invite token  |
-| POST   | `/api/jobs/invite/:token/accept` | Yes  | Accept invite        |
-
-### Internal
-
-| Method | Path                            | Auth         | Description          |
-| ------ | ------------------------------- | ------------ | -------------------- |
-| POST   | `/api/internal/ingest/jobs`     | Internal key | Bulk ingest jobs     |
-| POST   | `/api/internal/ingest/profiles` | Internal key | Bulk ingest profiles |
-
 ### WebSocket Endpoints
 
-| Path              | Description                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `/ws/counts`      | Broadcasts `{ jobs, profiles }` counts every 30 s with jitter simulation                 |
-| `/ws/public-data` | Broadcasts full job + profile snapshots every 30 s with diff tracking (changed, deleted) |
+| Path              | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| `/ws/counts`      | Broadcasts `{ jobs, profiles }` counts every 30 s             |
+| `/ws/public-data` | Broadcasts full job + profile snapshots with diff tracking   |
 
 ---
 
-## Data Models (Prisma)
+## Database (MongoDB Atlas)
 
-### Job
+This service connects to the `matchdb-jobs` database on MongoDB Atlas.
+Schemas are defined as Mongoose models � no migrations needed.
 
-`title`, `description`, `vendorId`, `vendorEmail`, `recruiterName`, `recruiterPhone`, `location`, `jobCountry`, `jobState`, `jobCity`, `jobType` (full_time / contract), `jobSubType` (c2c / c2h / w2 / 1099 / direct_hire / salary), `salaryMin`, `salaryMax`, `payPerHour`, `skillsRequired[]`, `experienceRequired`, `workMode` (onsite / remote / hybrid), `isActive`
+### Collections (12 models)
 
-### CandidateProfile
+- **Job** � Job postings with skills, location, salary, type
+- **CandidateProfile** � Candidate resumes, skills, visibility config
+- **Application** � Job applications with status tracking
+- **PokeRecord** � Interaction notifications between users
+- **PokeLog** � Monthly poke rate-limit tracking
+- **Company** � Marketer companies
+- **MarketerCandidate** � Marketer-candidate roster entries
+- **ForwardedOpening** � Jobs forwarded to candidates
+- **CompanyInvite** � Invite tokens with expiry
+- **ProjectFinancial** � Per-application bill/pay rates and taxes
+- **Timesheet** � Weekly timesheets with approval workflow
+- **InterviewInvite** � Interview scheduling records
 
-`candidateId`, `username`, `name`, `email`, `phone`, `currentCompany`, `currentRole`, `preferredJobType`, `expectedHourlyRate`, `experienceYears`, `skills[]`, `location`, `profileCountry`, `bio`, `resumeSummary`, `resumeExperience`, `resumeEducation`, `resumeAchievements`, `visibilityConfig` (domain→subdomain map), `profileLocked`
-
-### Application
-
-`jobId`, `jobTitle`, `candidateId`, `candidateEmail`, `coverLetter`, `status` (pending / reviewed / accepted / rejected)
-
-### PokeLog
-
-Rate-limits poke interactions per user per month:
-`userId`, `yearMonth` (YYYY-MM format), `count` — unique compound index on `(userId, yearMonth)`
-
-### PokeRecord
-
-Individual poke interactions: `fromUserId`, `toUserId`, `fromUserType`, `toUserType`, `jobId?`, `message?`
-
-### Company
-
-Marketer company: `name`, `marketerId`, `marketerEmail`
-
-### MarketerCandidate
-
-Roster entry: `companyId`, `marketerId`, `candidateId`, `candidateName`, `candidateEmail`
-
-### ForwardedOpening
-
-`marketerId`, `candidateId`, `candidateName`, `candidateEmail`, `jobId`, `jobTitle`, `vendorEmail`
-
-### CompanyInvite
-
-Marketer invite tokens: `companyId`, `marketerId`, `candidateEmail`, `token` (unique), `status` (pending / accepted / expired), `expiresAt`
-
-### ProjectFinancial
-
-Per-application financial record: `applicationId`, `companyId`, `candidateId`, `billRate`, `payRate`, `hoursPerWeek`, `stateTaxRate`, `federalTaxRate`, `cashPct`, `netPayable`, `margin`
-
----
-
-## Skill Extraction
-
-`skill-extractor.service.ts` auto-extracts skills from free-form text (resumes, job descriptions) using a curated list of ~150 keywords across: Languages, Frontend, Backend, Databases, Cloud/DevOps, Data/AI/ML, Tools, Mobile, Testing. Case-insensitive with word-boundary matching.
+See [DATABASE-SCHEMA.md](../DATABASE-SCHEMA.md) for the full schema reference.
 
 ---
 
@@ -208,19 +175,19 @@ Per-application financial record: `applicationId`, `companyId`, `candidateId`, `
 
 ### Prerequisites
 
-- **Node.js** ≥ 18
-- **npm** ≥ 9
-- **PostgreSQL** running (same instance as shell-services)
-- **shell-services** must have run migrations first (`npx prisma migrate dev`)
+- **Node.js** >= 18
+- **npm** >= 9
+- **MongoDB Atlas** connection string (configured in env files)
+- **shell-services** must be running (issues JWT tokens verified by this service)
 
 ### Environment Variables
 
-Create `env/.env.local`:
+Config is loaded from `env/.env.{NODE_ENV}` files:
 
 ```env
 PORT=8001
 NODE_ENV=local
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/matchdb
+MONGO_URI=mongodb+srv://...@matchdb.rhutf6s.mongodb.net/matchdb-jobs?retryWrites=true&w=majority
 JWT_SECRET=dev-jwt-secret-change-in-production-min-32-chars
 SENDGRID_API_KEY=
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:4000,http://localhost:4001
@@ -235,10 +202,7 @@ CLIENT_URL=http://localhost:3000
 # 1. Install dependencies
 npm install
 
-# 2. Generate Prisma client (generate-only — never run migrate here)
-npx prisma generate
-
-# 3. Start the dev server (hot-reload)
+# 2. Start the dev server (hot-reload)
 npm run dev
 ```
 
@@ -253,6 +217,12 @@ The server starts on **http://localhost:8001**.
 | `npm run dev`   | Start with hot reload (tsx watch) |
 | `npm run build` | Compile TypeScript to `dist/`     |
 | `npm start`     | Run compiled output               |
+
+---
+
+## Skill Extraction
+
+`skill-extractor.service.ts` auto-extracts skills from free-form text (resumes, job descriptions) using a curated list of ~150 keywords across: Languages, Frontend, Backend, Databases, Cloud/DevOps, Data/AI/ML, Tools, Mobile, Testing. Case-insensitive with word-boundary matching.
 
 ---
 

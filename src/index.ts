@@ -1,11 +1,12 @@
 import { createServer } from "node:http";
 import { env } from "./config/env";
-import { prisma } from "./config/prisma";
+import { connectMongo, disconnectMongo } from "./config/mongoose";
 import app from "./app";
 import { createCountsWebSocket } from "./services/ws-counts.service";
 import { createPublicDataWebSocket } from "./services/ws-public-data.service";
 
 async function main() {
+  await connectMongo();
   const server = createServer(app);
 
   // Create WebSocket servers in noServer mode
@@ -42,6 +43,6 @@ main().catch((err) => {
 });
 
 process.on("SIGTERM", async () => {
-  await prisma.$disconnect();
+  await disconnectMongo();
   process.exit(0);
 });

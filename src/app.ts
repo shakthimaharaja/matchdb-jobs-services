@@ -12,7 +12,7 @@ import interviewsRoutes from "./routes/interviews.routes";
 import internalRoutes from "./routes/internal.routes";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
-import { requireCandidate } from "./middleware/auth.middleware";
+import { requireAuth, requireCandidate } from "./middleware/auth.middleware";
 import {
   listCompanies,
   getCandidateForwardedOpenings,
@@ -20,7 +20,6 @@ import {
   acceptInvite,
   searchCompanies,
 } from "./controllers/marketer.controller";
-import { requireAuth } from "./middleware/auth.middleware";
 import { addSSEClient } from "./services/sse.service";
 
 const app = express();
@@ -65,7 +64,7 @@ app.use("/api/jobs/timesheets", timesheetsRoutes);
 app.use("/api/jobs/interviews", interviewsRoutes);
 app.use("/api/jobs", jobsRoutes);
 
-// Internal: service-to-service ingest (data-collection → PostgreSQL)
+// Internal: service-to-service ingest (data-collection → MongoDB)
 app.use("/api/internal", internalRoutes);
 
 // SSE: real-time push to dashboard clients — fires when ingest writes new data

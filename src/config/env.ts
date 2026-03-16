@@ -14,7 +14,7 @@ function required(key: string): string {
 export const env = {
   NODE_ENV: ENV,
   PORT: parseInt(process.env.PORT || "8001", 10),
-  DATABASE_URL: required("DATABASE_URL"),
+  MONGO_URI: required("MONGO_URI"),
   JWT_SECRET: required("JWT_SECRET"),
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || "",
   SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL || "noreply@matchdb.io",
@@ -26,6 +26,7 @@ export const env = {
   // Internal ingest API — shared secret with matchdb-data-collection-mono
   INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || "matchdb-internal-dev-key",
   // System "vendor" identity used for collection-uploaded job postings
-  SYSTEM_VENDOR_ID: process.env.SYSTEM_VENDOR_ID || "00000000-0000-0000-0000-000000000001",
+  SYSTEM_VENDOR_ID:
+    process.env.SYSTEM_VENDOR_ID || "00000000-0000-0000-0000-000000000001",
   SYSTEM_VENDOR_EMAIL: process.env.SYSTEM_VENDOR_EMAIL || "system@matchdb.io",
 };

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { Decimal } from "@prisma/client/runtime/library";
-import { prisma } from "../config/prisma";
+import { Application, ProjectFinancial } from "../models";
 
 // ─── US State Tax Rates (2024–2025 approximate top marginal income tax rates) ─
 // States with no income tax: AK, FL, NV, NH, SD, TN, TX, WA, WY
@@ -116,14 +115,10 @@ export async function getProjectFinancial(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const record = await prisma.projectFinancial.findUnique({
-      where: {
-        applicationId_marketerId: {
-          applicationId: req.params.applicationId,
-          marketerId: req.user!.userId,
-        },
-      },
-    });
+    const record = await ProjectFinancial.findOne({
+      applicationId: req.params.applicationId,
+      marketerId: req.user!.userId,
+    }).lean();
 
     if (!record) {
       res.json(null);
@@ -147,44 +142,44 @@ export async function getCandidateFinancials(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const records = await prisma.projectFinancial.findMany({
-      where: {
-        marketerId: req.user!.userId,
-        candidateId: req.params.candidateId,
-      },
-      include: {
-        application: {
-          select: {
-            id: true,
-            jobTitle: true,
-            status: true,
-            job: {
-              select: {
-                title: true,
-                vendorEmail: true,
-                location: true,
-                jobType: true,
-                jobSubType: true,
-                isActive: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const records = await ProjectFinancial.find({
+      marketerId: req.user!.userId,
+      candidateId: req.params.candidateId,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Enrich with application + job info
+    const applicationIds = records.map((r) => r.applicationId);
+    const applications = await Application.find({
+      _id: { $in: applicationIds },
+    })
+      .select("_id jobTitle status jobId")
+      .lean();
+
+    const { Job } = await import("../models");
+    const jobIds = applications.map((a) => a.jobId).filter(Boolean);
+    const jobs = await Job.find({ _id: { $in: jobIds } })
+      .select("_id title vendorEmail location jobType jobSubType isActive")
+      .lean();
+    const jobMap = new Map(jobs.map((j) => [j._id, j]));
+    const appMap = new Map(applications.map((a) => [a._id, a]));
 
     res.json(
-      records.map((r) => ({
-        ...formatFinancial(r),
-        job_title: r.application?.job?.title ?? r.application?.jobTitle ?? "",
-        vendor_email: r.application?.job?.vendorEmail ?? "",
-        location: r.application?.job?.location ?? "",
-        job_type: r.application?.job?.jobType ?? "",
-        job_sub_type: r.application?.job?.jobSubType ?? "",
-        is_active: r.application?.job?.isActive ?? false,
-        application_status: r.application?.status ?? "",
-      })),
+      records.map((r) => {
+        const app = appMap.get(r.applicationId);
+        const job = app?.jobId ? jobMap.get(app.jobId) : null;
+        return {
+          ...formatFinancial(r),
+          job_title: job?.title ?? app?.jobTitle ?? "",
+          vendor_email: job?.vendorEmail ?? "",
+          location: job?.location ?? "",
+          job_type: job?.jobType ?? "",
+          job_sub_type: job?.jobSubType ?? "",
+          is_active: job?.isActive ?? false,
+          application_status: app?.status ?? "",
+        };
+      }),
     );
   } catch (err) {
     next(err);
@@ -241,9 +236,7 @@ export async function upsertProjectFinancial(
     }
 
     // Validate the application exists
-    const app = await prisma.application.findUnique({
-      where: { id: applicationId },
-    });
+    const app = await Application.findById(applicationId).lean();
     if (!app) {
       res.status(404).json({ error: "Application not found" });
       return;
@@ -284,20 +277,11 @@ export async function upsertProjectFinancial(
       notes: notes ?? "",
     };
 
-    const record = await prisma.projectFinancial.upsert({
-      where: {
-        applicationId_marketerId: {
-          applicationId,
-          marketerId: req.user!.userId,
-        },
-      },
-      create: {
-        applicationId,
-        marketerId: req.user!.userId,
-        ...data,
-      },
-      update: data,
-    });
+    const record = await ProjectFinancial.findOneAndUpdate(
+      { applicationId, marketerId: req.user!.userId },
+      { $set: { ...data, applicationId, marketerId: req.user!.userId } },
+      { upsert: true, new: true },
+    ).lean();
 
     res.json(formatFinancial(record));
   } catch (err) {
@@ -313,11 +297,9 @@ export async function deleteProjectFinancial(
   next: NextFunction,
 ): Promise<void> {
   try {
-    await prisma.projectFinancial.deleteMany({
-      where: {
-        applicationId: req.params.applicationId,
-        marketerId: req.user!.userId,
-      },
+    await ProjectFinancial.deleteMany({
+      applicationId: req.params.applicationId,
+      marketerId: req.user!.userId,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -336,31 +318,34 @@ export async function getFinancialSummary(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const agg = await prisma.projectFinancial.aggregate({
-      where: { marketerId: req.user!.userId },
-      _sum: {
-        totalBilled: true,
-        totalPay: true,
-        taxAmount: true,
-        cashAmount: true,
-        netPayable: true,
-        amountPaid: true,
-        amountPending: true,
-        hoursWorked: true,
+    const [agg] = await ProjectFinancial.aggregate([
+      { $match: { marketerId: req.user!.userId } },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          totalBilled: { $sum: "$totalBilled" },
+          totalPay: { $sum: "$totalPay" },
+          taxAmount: { $sum: "$taxAmount" },
+          cashAmount: { $sum: "$cashAmount" },
+          netPayable: { $sum: "$netPayable" },
+          amountPaid: { $sum: "$amountPaid" },
+          amountPending: { $sum: "$amountPending" },
+          hoursWorked: { $sum: "$hoursWorked" },
+        },
       },
-      _count: true,
-    });
+    ]);
 
     res.json({
-      count: agg._count,
-      totalBilled: Number(agg._sum.totalBilled) || 0,
-      totalPay: Number(agg._sum.totalPay) || 0,
-      taxAmount: Number(agg._sum.taxAmount) || 0,
-      cashAmount: Number(agg._sum.cashAmount) || 0,
-      netPayable: Number(agg._sum.netPayable) || 0,
-      amountPaid: Number(agg._sum.amountPaid) || 0,
-      amountPending: Number(agg._sum.amountPending) || 0,
-      hoursWorked: Number(agg._sum.hoursWorked) || 0,
+      count: agg?.count ?? 0,
+      totalBilled: agg?.totalBilled ?? 0,
+      totalPay: agg?.totalPay ?? 0,
+      taxAmount: agg?.taxAmount ?? 0,
+      cashAmount: agg?.cashAmount ?? 0,
+      netPayable: agg?.netPayable ?? 0,
+      amountPaid: agg?.amountPaid ?? 0,
+      amountPending: agg?.amountPending ?? 0,
+      hoursWorked: agg?.hoursWorked ?? 0,
     });
   } catch (err) {
     next(err);
@@ -371,7 +356,7 @@ export async function getFinancialSummary(
 
 function formatFinancial(r: any) {
   return {
-    id: r.id,
+    id: r._id,
     applicationId: r.applicationId,
     marketerId: r.marketerId,
     candidateId: r.candidateId,
@@ -379,8 +364,8 @@ function formatFinancial(r: any) {
     billRate: toNum(r.billRate),
     payRate: toNum(r.payRate),
     hoursWorked: toNum(r.hoursWorked),
-    projectStart: r.projectStart?.toISOString() ?? null,
-    projectEnd: r.projectEnd?.toISOString() ?? null,
+    projectStart: r.projectStart?.toISOString?.() ?? r.projectStart ?? null,
+    projectEnd: r.projectEnd?.toISOString?.() ?? r.projectEnd ?? null,
     stateCode: r.stateCode,
     stateTaxPct: toNum(r.stateTaxPct),
     cashPct: toNum(r.cashPct),
@@ -392,12 +377,12 @@ function formatFinancial(r: any) {
     amountPaid: toNum(r.amountPaid),
     amountPending: toNum(r.amountPending),
     notes: r.notes,
-    createdAt: r.createdAt?.toISOString() ?? "",
-    updatedAt: r.updatedAt?.toISOString() ?? "",
+    createdAt: r.createdAt?.toISOString?.() ?? r.createdAt ?? "",
+    updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt ?? "",
   };
 }
 
-function toNum(v: Decimal | number | null | undefined): number {
+function toNum(v: number | null | undefined): number {
   if (v == null) return 0;
-  return typeof v === "number" ? v : Number(v);
+  return Number(v);
 }

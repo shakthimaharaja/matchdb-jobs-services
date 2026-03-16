@@ -1,7 +1,23 @@
 import { Request, Response, NextFunction } from "express";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
-import { prisma } from "../config/prisma";
+import {
+  Job,
+  CandidateProfile,
+  Application,
+  PokeRecord,
+  Company,
+  MarketerCandidate,
+  ForwardedOpening,
+  CompanyInvite,
+  ProjectFinancial,
+} from "../models";
 import { sendPokeEmail } from "../services/sendgrid.service";
+
+/** Safely coerce any value to a number (null/undefined → 0). */
+function toNum(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return v;
+  return Number(v);
+}
 
 // --- Marketer: Dashboard Stats ------------------------------------------------
 
@@ -22,11 +38,11 @@ export async function getMarketerStats(
       totalClosedJobs,
       totalPlaced,
     ] = await Promise.all([
-      prisma.candidateProfile.count(),
-      prisma.job.count(),
-      prisma.job.count({ where: { isActive: true } }),
-      prisma.job.count({ where: { isActive: false } }),
-      prisma.application.count({ where: { status: "hired" } }),
+      CandidateProfile.countDocuments(),
+      Job.countDocuments(),
+      Job.countDocuments({ isActive: true }),
+      Job.countDocuments({ isActive: false }),
+      Application.countDocuments({ status: "hired" }),
     ]);
 
     res.json({
@@ -70,40 +86,45 @@ export async function getMarketerJobs(
 
     const where: any = { isActive: true };
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { location: { contains: search, mode: "insensitive" } },
-        { skillsRequired: { hasSome: [search] } },
+      const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(escaped, "i");
+      where.$or = [
+        { title: { $regex: rx } },
+        { location: { $regex: rx } },
+        { skillsRequired: search },
       ];
     }
 
     const [total, docs] = await Promise.all([
-      prisma.job.count({ where }),
-      prisma.job.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
+      Job.countDocuments(where),
+      Job.find(where)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
     ]);
 
     // Aggregate poke + email counts for these jobs
-    const jobIds = docs.map((j) => j.id);
-    const pokeCounts = await prisma.pokeRecord.groupBy({
-      by: ["targetId", "isEmail"],
-      where: { targetId: { in: jobIds } },
-      _count: { id: true },
-    });
+    const jobIds = docs.map((j) => j._id);
+    const pokeCounts = await PokeRecord.aggregate([
+      { $match: { targetId: { $in: jobIds } } },
+      {
+        $group: {
+          _id: { targetId: "$targetId", isEmail: "$isEmail" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
     const pokeMap: Record<string, { pokes: number; emails: number }> = {};
     for (const row of pokeCounts) {
-      const id = row.targetId;
+      const id = row._id.targetId;
       if (!pokeMap[id]) pokeMap[id] = { pokes: 0, emails: 0 };
-      if (row.isEmail) pokeMap[id].emails = row._count.id;
-      else pokeMap[id].pokes = row._count.id;
+      if (row._id.isEmail) pokeMap[id].emails = row.count;
+      else pokeMap[id].pokes = row.count;
     }
 
     const data = docs.map((j) => ({
-      id: j.id,
+      id: j._id,
       title: j.title,
       description: j.description ?? "",
       vendor_email: j.vendorEmail ?? "",
@@ -120,8 +141,8 @@ export async function getMarketerJobs(
       pay_per_hour: j.payPerHour == null ? null : Number(j.payPerHour),
       experience_required: j.experienceRequired ?? 0,
       application_count: j.applicationCount ?? 0,
-      poke_count: pokeMap[j.id]?.pokes ?? 0,
-      email_count: pokeMap[j.id]?.emails ?? 0,
+      poke_count: pokeMap[j._id]?.pokes ?? 0,
+      email_count: pokeMap[j._id]?.emails ?? 0,
       is_active: j.isActive,
       created_at: j.createdAt?.toISOString() ?? "",
     }));
@@ -163,63 +184,51 @@ export async function getMarketerProfiles(
 
     const where: any = {};
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { currentRole: { contains: search, mode: "insensitive" } },
-        { currentCompany: { contains: search, mode: "insensitive" } },
-        { location: { contains: search, mode: "insensitive" } },
-        { skills: { hasSome: [search] } },
+      const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(escaped, "i");
+      where.$or = [
+        { name: { $regex: rx } },
+        { currentRole: { $regex: rx } },
+        { currentCompany: { $regex: rx } },
+        { location: { $regex: rx } },
+        { skills: search },
       ];
     }
 
-    const selectFields = {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      currentRole: true,
-      currentCompany: true,
-      preferredJobType: true,
-      experienceYears: true,
-      expectedHourlyRate: true,
-      skills: true,
-      location: true,
-      resumeSummary: true,
-      resumeExperience: true,
-      resumeEducation: true,
-      resumeAchievements: true,
-      bio: true,
-      createdAt: true,
-    };
+    const selectFields =
+      "name email phone currentRole currentCompany preferredJobType experienceYears expectedHourlyRate skills location resumeSummary resumeExperience resumeEducation resumeAchievements bio createdAt";
 
     const [total, docs] = await Promise.all([
-      prisma.candidateProfile.count({ where }),
-      prisma.candidateProfile.findMany({
-        where,
-        select: selectFields,
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
+      CandidateProfile.countDocuments(where),
+      CandidateProfile.find(where)
+        .select(selectFields)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
     ]);
 
     // Aggregate poke + email counts for these profiles
-    const profileIds = docs.map((p) => p.id);
-    const pokeCounts = await prisma.pokeRecord.groupBy({
-      by: ["targetId", "isEmail"],
-      where: { targetId: { in: profileIds } },
-      _count: { id: true },
-    });
+    const profileIds = docs.map((p) => p._id);
+    const pokeCounts = await PokeRecord.aggregate([
+      { $match: { targetId: { $in: profileIds } } },
+      {
+        $group: {
+          _id: { targetId: "$targetId", isEmail: "$isEmail" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
     const pokeMap: Record<string, { pokes: number; emails: number }> = {};
     for (const row of pokeCounts) {
-      const id = row.targetId;
+      const id = row._id.targetId;
       if (!pokeMap[id]) pokeMap[id] = { pokes: 0, emails: 0 };
-      if (row.isEmail) pokeMap[id].emails = row._count.id;
-      else pokeMap[id].pokes = row._count.id;
+      if (row._id.isEmail) pokeMap[id].emails = row.count;
+      else pokeMap[id].pokes = row.count;
     }
 
     const data = docs.map((p) => ({
-      id: p.id,
+      id: p._id,
       name: p.name ?? "",
       email: p.email ?? "",
       phone: p.phone ?? "",
@@ -236,8 +245,8 @@ export async function getMarketerProfiles(
       resume_education: p.resumeEducation ?? "",
       resume_achievements: p.resumeAchievements ?? "",
       bio: p.bio ?? "",
-      poke_count: pokeMap[p.id]?.pokes ?? 0,
-      email_count: pokeMap[p.id]?.emails ?? 0,
+      poke_count: pokeMap[p._id]?.pokes ?? 0,
+      email_count: pokeMap[p._id]?.emails ?? 0,
       created_at: p.createdAt?.toISOString() ?? "",
     }));
 
@@ -269,13 +278,15 @@ export async function registerCompany(
     const marketerEmail = req.user!.email;
 
     // Upsert � one company per marketer
-    let company = await prisma.company.findUnique({ where: { marketerId } });
-    company ??= await prisma.company.create({
-      data: { name: name.trim(), marketerId, marketerEmail },
-    });
+    let company: any = await Company.findOne({ marketerId }).lean();
+    if (!company) {
+      company = (
+        await Company.create({ name: name.trim(), marketerId, marketerEmail })
+      ).toObject();
+    }
 
     res.json({
-      id: company.id,
+      id: company._id,
       name: company.name,
       marketer_id: company.marketerId,
       marketer_email: company.marketerEmail,
@@ -296,15 +307,15 @@ export async function getMyCompany(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.json(null);
       return;
     }
     res.json({
-      id: company.id,
+      id: company._id,
       name: company.name,
       marketer_id: company.marketerId,
       marketer_email: company.marketerEmail,
@@ -327,11 +338,11 @@ export async function listCompanies(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const docs = await prisma.company.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    });
-    res.json(docs.map((d) => ({ id: d.id, name: d.name })));
+    const docs = await Company.find({})
+      .select("_id name")
+      .sort({ name: 1 })
+      .lean();
+    res.json(docs.map((d) => ({ id: d._id, name: d.name })));
   } catch (err) {
     next(err);
   }
@@ -358,34 +369,32 @@ export async function addMarketerCandidate(
       return;
     }
 
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
       return;
     }
 
     try {
-      const doc = await prisma.marketerCandidate.create({
-        data: {
-          companyId: company.id,
-          marketerId: req.user!.userId,
-          candidateId: "",
-          candidateName: (candidateName || "").trim(),
-          candidateEmail: candidateEmail.trim().toLowerCase(),
-        },
+      const doc = await MarketerCandidate.create({
+        companyId: company._id,
+        marketerId: req.user!.userId,
+        candidateId: "",
+        candidateName: (candidateName || "").trim(),
+        candidateEmail: candidateEmail.trim().toLowerCase(),
       });
 
       res.status(201).json({
-        id: doc.id,
+        id: doc._id,
         company_id: doc.companyId,
         candidate_name: doc.candidateName,
         candidate_email: doc.candidateEmail,
         created_at: doc.createdAt?.toISOString() ?? "",
       });
-    } catch (e) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
+    } catch (e: any) {
+      if (e.code === 11000) {
         res
           .status(409)
           .json({ error: "Candidate already added to your company" });
@@ -408,34 +417,27 @@ export async function getMarketerCandidates(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.json([]);
       return;
     }
 
-    const docs = await prisma.marketerCandidate.findMany({
-      where: { companyId: company.id },
-      orderBy: { createdAt: "desc" },
-    });
+    const docs = await MarketerCandidate.find({ companyId: company._id })
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Look up candidate profiles by email to get profile IDs for poke counts
     const emails = docs.map((d) => d.candidateEmail.toLowerCase());
-    const profiles = await prisma.candidateProfile.findMany({
-      where: { email: { in: emails } },
-      select: {
-        id: true,
-        email: true,
-        candidateId: true,
-        name: true,
-        currentRole: true,
-        skills: true,
-        experienceYears: true,
-        location: true,
-      },
-    });
+    const profiles = await CandidateProfile.find({
+      email: { $in: emails },
+    })
+      .select(
+        "_id email candidateId name currentRole skills experienceYears location",
+      )
+      .lean();
     const profileByEmail: Record<string, (typeof profiles)[0]> = {};
     for (const p of profiles) {
       profileByEmail[p.email.toLowerCase()] = p;
@@ -443,34 +445,38 @@ export async function getMarketerCandidates(
 
     // Aggregate poke + email counts for these candidates (by profile ID or candidateId)
     const targetIds = profiles
-      .map((p) => p.id)
+      .map((p) => p._id)
       .concat(profiles.map((p) => p.candidateId))
       .filter(Boolean);
     const pokeCounts = targetIds.length
-      ? await prisma.pokeRecord.groupBy({
-          by: ["targetId", "isEmail"],
-          where: { targetId: { in: targetIds } },
-          _count: { id: true },
-        })
+      ? await PokeRecord.aggregate([
+          { $match: { targetId: { $in: targetIds } } },
+          {
+            $group: {
+              _id: { targetId: "$targetId", isEmail: "$isEmail" },
+              count: { $sum: 1 },
+            },
+          },
+        ])
       : [];
     const pokeMap: Record<string, { pokes: number; emails: number }> = {};
     for (const row of pokeCounts) {
-      const id = row.targetId;
+      const id = row._id.targetId;
       if (!pokeMap[id]) pokeMap[id] = { pokes: 0, emails: 0 };
-      if (row.isEmail) pokeMap[id].emails += row._count.id;
-      else pokeMap[id].pokes += row._count.id;
+      if (row._id.isEmail) pokeMap[id].emails += row.count;
+      else pokeMap[id].pokes += row.count;
     }
 
     res.json(
       docs.map((d) => {
         const prof = profileByEmail[d.candidateEmail.toLowerCase()];
-        const pid = prof?.id ?? "";
+        const pid = prof?._id ?? "";
         const cid = prof?.candidateId ?? "";
         const pokes = (pokeMap[pid]?.pokes ?? 0) + (pokeMap[cid]?.pokes ?? 0);
         const emailCt =
           (pokeMap[pid]?.emails ?? 0) + (pokeMap[cid]?.emails ?? 0);
         return {
-          id: d.id,
+          id: d._id,
           company_id: d.companyId,
           candidate_name: d.candidateName,
           candidate_email: d.candidateEmail,
@@ -504,9 +510,9 @@ export async function getCompanySummary(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.json({
         candidates: [],
@@ -527,62 +533,50 @@ export async function getCompanySummary(
     }
 
     // 1. All roster candidates
-    const roster = await prisma.marketerCandidate.findMany({
-      where: { companyId: company.id },
-      orderBy: { createdAt: "desc" },
-    });
+    const roster = await MarketerCandidate.find({ companyId: company._id })
+      .sort({ createdAt: -1 })
+      .lean();
 
     // 2. Matching profiles
     const emails = roster.map((r) => r.candidateEmail.toLowerCase());
-    const profiles = await prisma.candidateProfile.findMany({
-      where: { email: { in: emails } },
-      select: {
-        id: true,
-        email: true,
-        candidateId: true,
-        name: true,
-        currentRole: true,
-        skills: true,
-        experienceYears: true,
-        location: true,
-        currentCompany: true,
-      },
-    });
+    const profiles = await CandidateProfile.find({
+      email: { $in: emails },
+    })
+      .select(
+        "_id email candidateId name currentRole skills experienceYears location currentCompany",
+      )
+      .lean();
     const profileByEmail: Record<string, (typeof profiles)[0]> = {};
     for (const p of profiles) profileByEmail[p.email.toLowerCase()] = p;
 
     // 3. All financials for this marketer
-    const allFinancials = await prisma.projectFinancial.findMany({
-      where: { marketerId: req.user!.userId },
-    });
+    const allFinancials = await ProjectFinancial.find({
+      marketerId: req.user!.userId,
+    }).lean();
     const finByAppId = new Map(allFinancials.map((f) => [f.applicationId, f]));
 
     // 4. All applications for these candidates
     const candidateIds = profiles
       .map((p) => p.candidateId)
-      .filter(Boolean) as string[];
+      .filter((id): id is string => Boolean(id));
     const applications = candidateIds.length
-      ? await prisma.application.findMany({
-          where: { candidateId: { in: candidateIds } },
-          include: {
-            job: {
-              select: {
-                id: true,
-                title: true,
-                vendorEmail: true,
-                location: true,
-                jobType: true,
-                jobSubType: true,
-                payPerHour: true,
-                salaryMin: true,
-                salaryMax: true,
-                isActive: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        })
+      ? await Application.find({ candidateId: { $in: candidateIds } })
+          .sort({ createdAt: -1 })
+          .lean()
       : [];
+
+    // Fetch jobs for these applications
+    const appJobIds = [
+      ...new Set(applications.map((a) => a.jobId).filter(Boolean)),
+    ];
+    const appJobs = appJobIds.length
+      ? await Job.find({ _id: { $in: appJobIds } })
+          .select(
+            "_id title vendorEmail location jobType jobSubType payPerHour salaryMin salaryMax isActive",
+          )
+          .lean()
+      : [];
+    const jobMap = new Map(appJobs.map((j) => [j._id, j]));
 
     // Map candidateId -> email for lookup
     const cidToEmail: Record<string, string> = {};
@@ -613,10 +607,8 @@ export async function getCompanySummary(
         (r) => r.candidateEmail.toLowerCase() === email,
       );
       const prof = profileByEmail[email];
-      const fin = finByAppId.get(a.id);
-
-      const toNum = (v: any) =>
-        v == null ? 0 : typeof v === "number" ? v : Number(v);
+      const fin = finByAppId.get(a._id);
+      const aJob = jobMap.get(a.jobId);
 
       // Aggregate per-candidate
       if (!candFinTotals[email]) {
@@ -633,7 +625,7 @@ export async function getCompanySummary(
       }
       const ct = candFinTotals[email];
       ct.projectCount++;
-      if (a.job?.isActive) ct.activeProjects++;
+      if (aJob?.isActive) ct.activeProjects++;
       if (fin) {
         ct.totalBilled += toNum(fin.totalBilled);
         ct.totalPay += toNum(fin.totalPay);
@@ -644,21 +636,21 @@ export async function getCompanySummary(
       }
 
       // Domain count — use job title or role
-      const domain = prof?.currentRole || a.job?.title || "Unknown";
+      const domain = prof?.currentRole || aJob?.title || "Unknown";
       domainMap[domain] = (domainMap[domain] || 0) + 1;
 
       // Project row
       projectsOut.push({
-        applicationId: a.id,
-        candidateId: rosterEntry?.id ?? "",
+        applicationId: a._id,
+        candidateId: rosterEntry?._id ?? "",
         candidateName: rosterEntry?.candidateName ?? prof?.name ?? "",
         candidateEmail: email,
-        jobTitle: a.job?.title ?? a.jobTitle,
-        vendorEmail: a.job?.vendorEmail ?? "",
-        location: a.job?.location ?? "",
-        jobType: a.job?.jobType ?? "",
-        jobSubType: a.job?.jobSubType ?? "",
-        isActive: a.job?.isActive ?? false,
+        jobTitle: aJob?.title ?? a.jobTitle,
+        vendorEmail: aJob?.vendorEmail ?? "",
+        location: aJob?.location ?? "",
+        jobType: aJob?.jobType ?? "",
+        jobSubType: aJob?.jobSubType ?? "",
+        isActive: aJob?.isActive ?? false,
         appliedAt: a.createdAt?.toISOString() ?? "",
         financials: fin
           ? {
@@ -684,7 +676,7 @@ export async function getCompanySummary(
       const prof = profileByEmail[email];
       const ft = candFinTotals[email];
       return {
-        id: r.id,
+        id: r._id,
         candidateName: r.candidateName,
         candidateEmail: r.candidateEmail,
         inviteStatus: r.inviteStatus,
@@ -716,8 +708,6 @@ export async function getCompanySummary(
       cashAmount: 0,
     };
     for (const f of allFinancials) {
-      const toNum = (v: any) =>
-        v == null ? 0 : typeof v === "number" ? v : Number(v);
       grandTotals.totalBilled += toNum(f.totalBilled);
       grandTotals.totalPay += toNum(f.totalPay);
       grandTotals.netPayable += toNum(f.netPayable);
@@ -754,90 +744,81 @@ export async function getMarketerCandidateDetail(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.status(400).json({ error: "No company registered" });
       return;
     }
 
-    const mc = await prisma.marketerCandidate.findFirst({
-      where: { id: req.params.id, companyId: company.id },
-    });
+    const mc = await MarketerCandidate.findOne({
+      _id: req.params.id,
+      companyId: company._id,
+    }).lean();
     if (!mc) {
       res.status(404).json({ error: "Candidate not found in your roster" });
       return;
     }
 
     // Look up full profile
-    const profile = await prisma.candidateProfile.findFirst({
-      where: { email: mc.candidateEmail.toLowerCase() },
-    });
+    const profile = await CandidateProfile.findOne({
+      email: mc.candidateEmail.toLowerCase(),
+    }).lean();
 
     // Get all applications (projects) for this candidate
     const applications = profile?.candidateId
-      ? await prisma.application.findMany({
-          where: { candidateId: profile.candidateId },
-          include: {
-            job: {
-              select: {
-                id: true,
-                title: true,
-                vendorEmail: true,
-                location: true,
-                jobType: true,
-                jobSubType: true,
-                payPerHour: true,
-                salaryMin: true,
-                salaryMax: true,
-                isActive: true,
-                createdAt: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        })
+      ? await Application.find({ candidateId: profile.candidateId })
+          .sort({ createdAt: -1 })
+          .lean()
       : [];
+
+    // Separate job lookup
+    const appJobIds = [...new Set(applications.map((a) => a.jobId))];
+    const appJobs = appJobIds.length
+      ? await Job.find({ _id: { $in: appJobIds } })
+          .select(
+            "title vendorEmail location jobType jobSubType payPerHour salaryMin salaryMax isActive createdAt",
+          )
+          .lean()
+      : [];
+    const jobMap = new Map(appJobs.map((j) => [j._id, j]));
 
     // Get financials for this candidate under this marketer
     const financials = profile?.candidateId
-      ? await prisma.projectFinancial.findMany({
-          where: {
-            marketerId: req.user!.userId,
-            candidateId: profile.candidateId,
-          },
-          orderBy: { createdAt: "desc" },
+      ? await ProjectFinancial.find({
+          marketerId: req.user!.userId,
+          candidateId: profile.candidateId,
         })
+          .sort({ createdAt: -1 })
+          .lean()
       : [];
 
     // Build a map of applicationId ? financial for quick lookup
     const financialMap = new Map(financials.map((f) => [f.applicationId, f]));
 
     // Get forwarded openings for this candidate from this marketer
-    const forwarded = await prisma.forwardedOpening.findMany({
-      where: {
-        marketerId: req.user!.userId,
-        candidateEmail: mc.candidateEmail.toLowerCase(),
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const forwarded = await ForwardedOpening.find({
+      marketerId: req.user!.userId,
+      candidateEmail: mc.candidateEmail.toLowerCase(),
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Get poke/email records received
-    const targetIds = [profile?.id, profile?.candidateId].filter(
+    const targetIds = [profile?._id, profile?.candidateId].filter(
       (x): x is string => Boolean(x),
     );
     const pokeRecords = targetIds.length
-      ? await prisma.pokeRecord.findMany({
-          where: { targetId: { in: targetIds } },
-          orderBy: { createdAt: "desc" },
-          take: 50,
-        })
+      ? await PokeRecord.find({ targetId: { $in: targetIds } })
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .lean()
       : [];
 
     res.json({
       roster: {
-        id: mc.id,
+        id: mc._id,
         candidate_name: mc.candidateName,
         candidate_email: mc.candidateEmail,
         invite_status: mc.inviteStatus,
@@ -846,7 +827,7 @@ export async function getMarketerCandidateDetail(
       },
       profile: profile
         ? {
-            id: profile.id,
+            id: profile._id,
             candidate_id: profile.candidateId,
             name: profile.name,
             email: profile.email,
@@ -869,25 +850,26 @@ export async function getMarketerCandidateDetail(
           }
         : null,
       projects: applications.map((a) => {
-        const fin = financialMap.get(a.id);
+        const fin = financialMap.get(a._id);
+        const aJob = jobMap.get(a.jobId);
         return {
-          id: a.id,
+          id: a._id,
           job_id: a.jobId,
-          job_title: a.job?.title ?? a.jobTitle,
-          vendor_email: a.job?.vendorEmail ?? "",
-          location: a.job?.location ?? "",
-          job_type: a.job?.jobType ?? "",
-          job_sub_type: a.job?.jobSubType ?? "",
+          job_title: aJob?.title ?? a.jobTitle,
+          vendor_email: aJob?.vendorEmail ?? "",
+          location: aJob?.location ?? "",
+          job_type: aJob?.jobType ?? "",
+          job_sub_type: aJob?.jobSubType ?? "",
           pay_per_hour:
-            a.job?.payPerHour == null ? null : Number(a.job.payPerHour),
-          salary_min: a.job?.salaryMin == null ? null : Number(a.job.salaryMin),
-          salary_max: a.job?.salaryMax == null ? null : Number(a.job.salaryMax),
+            aJob?.payPerHour == null ? null : Number(aJob.payPerHour),
+          salary_min: aJob?.salaryMin == null ? null : Number(aJob.salaryMin),
+          salary_max: aJob?.salaryMax == null ? null : Number(aJob.salaryMax),
           status: a.status,
-          is_active: a.job?.isActive ?? false,
+          is_active: aJob?.isActive ?? false,
           applied_at: a.createdAt?.toISOString() ?? "",
           financials: fin
             ? {
-                id: fin.id,
+                id: fin._id,
                 billRate: Number(fin.billRate),
                 payRate: Number(fin.payRate),
                 hoursWorked: Number(fin.hoursWorked),
@@ -909,7 +891,7 @@ export async function getMarketerCandidateDetail(
         };
       }),
       forwarded_openings: forwarded.map((f) => ({
-        id: f.id,
+        id: f._id,
         job_id: f.jobId,
         job_title: f.jobTitle,
         job_location: f.jobLocation,
@@ -921,7 +903,7 @@ export async function getMarketerCandidateDetail(
         created_at: f.createdAt?.toISOString() ?? "",
       })),
       vendor_activity: pokeRecords.map((p) => ({
-        id: p.id,
+        id: p._id,
         sender_email: p.senderEmail,
         sender_name: p.senderName,
         sender_type: p.senderType,
@@ -945,11 +927,9 @@ export async function removeMarketerCandidate(
   next: NextFunction,
 ): Promise<void> {
   try {
-    await prisma.marketerCandidate.deleteMany({
-      where: {
-        id: req.params.id,
-        marketerId: req.user!.userId,
-      },
+    await MarketerCandidate.deleteMany({
+      _id: req.params.id,
+      marketerId: req.user!.userId,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -980,21 +960,19 @@ export async function forwardOpening(
       return;
     }
 
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
       return;
     }
 
     // Enforce: candidate MUST be in the marketer's company roster
-    const mc = await prisma.marketerCandidate.findFirst({
-      where: {
-        companyId: company.id,
-        candidateEmail: candidateEmail.trim().toLowerCase(),
-      },
-    });
+    const mc = await MarketerCandidate.findOne({
+      companyId: company._id,
+      candidateEmail: candidateEmail.trim().toLowerCase(),
+    }).lean();
 
     if (!mc) {
       res.status(403).json({
@@ -1007,45 +985,43 @@ export async function forwardOpening(
     const candidateName = mc.candidateName || candidateEmail.trim();
 
     // Get job details
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    const job = await Job.findOne({ _id: jobId }).lean();
     if (!job) {
       res.status(404).json({ error: "Job not found" });
       return;
     }
 
     try {
-      const doc = await prisma.forwardedOpening.create({
-        data: {
-          marketerId: req.user!.userId,
-          marketerEmail: req.user!.email,
-          companyId: company.id,
-          companyName: company.name,
-          candidateEmail: candidateEmail.trim().toLowerCase(),
-          candidateName,
-          jobId: job.id,
-          jobTitle: job.title,
-          jobLocation: job.location,
-          jobType: job.jobType,
-          jobSubType: job.jobSubType,
-          vendorEmail: job.vendorEmail,
-          skillsRequired: job.skillsRequired,
-          payPerHour: job.payPerHour ?? undefined,
-          salaryMin: job.salaryMin ?? undefined,
-          salaryMax: job.salaryMax ?? undefined,
-          note: (note || "").trim(),
-          status: "pending",
-        },
+      const doc = await ForwardedOpening.create({
+        marketerId: req.user!.userId,
+        marketerEmail: req.user!.email,
+        companyId: company._id,
+        companyName: company.name,
+        candidateEmail: candidateEmail.trim().toLowerCase(),
+        candidateName,
+        jobId: job._id,
+        jobTitle: job.title,
+        jobLocation: job.location,
+        jobType: job.jobType,
+        jobSubType: job.jobSubType,
+        vendorEmail: job.vendorEmail,
+        skillsRequired: job.skillsRequired,
+        payPerHour: job.payPerHour ?? undefined,
+        salaryMin: job.salaryMin ?? undefined,
+        salaryMax: job.salaryMax ?? undefined,
+        note: (note || "").trim(),
+        status: "pending",
       });
 
       res.status(201).json({
-        id: doc.id,
+        id: doc._id,
         job_title: doc.jobTitle,
         candidate_email: doc.candidateEmail,
         status: doc.status,
         created_at: doc.createdAt?.toISOString() ?? "",
       });
     } catch (e) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
+      if ((e as any).code === 11000) {
         res.status(409).json({
           error: "This opening was already forwarded to this candidate",
         });
@@ -1068,14 +1044,13 @@ export async function getForwardedOpenings(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const docs = await prisma.forwardedOpening.findMany({
-      where: { marketerId: req.user!.userId },
-      orderBy: { createdAt: "desc" },
-    });
+    const docs = await ForwardedOpening.find({ marketerId: req.user!.userId })
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json(
       docs.map((d) => ({
-        id: d.id,
+        id: d._id,
         candidate_email: d.candidateEmail,
         candidate_name: d.candidateName,
         job_id: d.jobId,
@@ -1112,14 +1087,13 @@ export async function getCandidateForwardedOpenings(
 ): Promise<void> {
   try {
     const email = req.user!.email.toLowerCase();
-    const docs = await prisma.forwardedOpening.findMany({
-      where: { candidateEmail: email },
-      orderBy: { createdAt: "desc" },
-    });
+    const docs = await ForwardedOpening.find({ candidateEmail: email })
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json(
       docs.map((d) => ({
-        id: d.id,
+        id: d._id,
         marketer_email: d.marketerEmail,
         company_name: d.companyName,
         job_id: d.jobId,
@@ -1159,17 +1133,13 @@ export async function inviteCandidate(
     const { offerNote } = req.body as { offerNote?: string };
     const marketerId = req.user!.userId;
 
-    const company = await prisma.company.findUnique({
-      where: { marketerId },
-    });
+    const company = await Company.findOne({ marketerId }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
       return;
     }
 
-    const mc = await prisma.marketerCandidate.findFirst({
-      where: { id, marketerId },
-    });
+    const mc = await MarketerCandidate.findOne({ _id: id, marketerId }).lean();
     if (!mc) {
       res.status(404).json({ error: "Candidate not found in your roster" });
       return;
@@ -1177,41 +1147,38 @@ export async function inviteCandidate(
 
     // Create or upsert invite
     const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
-    const invite = await prisma.companyInvite.upsert({
-      where: {
-        companyId_candidateEmail: {
-          companyId: company.id,
+    const invite = await CompanyInvite.findOneAndUpdate(
+      { companyId: company._id, candidateEmail: mc.candidateEmail },
+      {
+        $set: {
+          offerNote: (offerNote || "").trim(),
+          status: "pending",
+          expiresAt,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: {
+          companyId: company._id,
+          companyName: company.name,
+          marketerId,
+          marketerEmail: req.user!.email,
           candidateEmail: mc.candidateEmail,
+          candidateName: mc.candidateName,
         },
       },
-      create: {
-        companyId: company.id,
-        companyName: company.name,
-        marketerId,
-        marketerEmail: req.user!.email,
-        candidateEmail: mc.candidateEmail,
-        candidateName: mc.candidateName,
-        offerNote: (offerNote || "").trim(),
-        status: "pending",
-        expiresAt,
-      },
-      update: {
-        offerNote: (offerNote || "").trim(),
-        status: "pending",
-        expiresAt,
-        updatedAt: new Date(),
-      },
-    });
+      { upsert: true, new: true },
+    ).lean();
 
     // Update roster entry with invite status
-    await prisma.marketerCandidate.update({
-      where: { id: mc.id },
-      data: {
-        inviteStatus: "invited",
-        inviteToken: invite.token,
-        inviteSentAt: new Date(),
+    await MarketerCandidate.updateOne(
+      { _id: mc._id },
+      {
+        $set: {
+          inviteStatus: "invited",
+          inviteToken: invite.token,
+          inviteSentAt: new Date(),
+        },
       },
-    });
+    );
 
     // Send invite email via SendGrid (dev: logs to console)
     const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
@@ -1231,7 +1198,7 @@ export async function inviteCandidate(
     }).catch((err) => console.error("[Invite Email] Send failed:", err));
 
     res.json({
-      id: invite.id,
+      id: invite._id,
       token: invite.token,
       candidate_email: invite.candidateEmail,
       status: invite.status,
@@ -1256,9 +1223,7 @@ export async function verifyInvite(
 ): Promise<void> {
   try {
     const { token } = _req.params;
-    const invite = await prisma.companyInvite.findUnique({
-      where: { token },
-    });
+    const invite = await CompanyInvite.findOne({ token }).lean();
 
     if (!invite) {
       res.status(404).json({ error: "Invite not found" });
@@ -1269,7 +1234,7 @@ export async function verifyInvite(
       res.json({
         status: "already_accepted",
         invite: {
-          id: invite.id,
+          id: invite._id,
           company_id: invite.companyId,
           company_name: invite.companyName,
           marketer_email: invite.marketerEmail,
@@ -1289,7 +1254,7 @@ export async function verifyInvite(
       res.json({
         status: "expired",
         invite: {
-          id: invite.id,
+          id: invite._id,
           company_id: invite.companyId,
           company_name: invite.companyName,
           marketer_email: invite.marketerEmail,
@@ -1308,7 +1273,7 @@ export async function verifyInvite(
     res.json({
       status: "valid",
       invite: {
-        id: invite.id,
+        id: invite._id,
         company_id: invite.companyId,
         company_name: invite.companyName,
         marketer_email: invite.marketerEmail,
@@ -1337,9 +1302,7 @@ export async function acceptInvite(
 ): Promise<void> {
   try {
     const { token } = req.params;
-    const invite = await prisma.companyInvite.findUnique({
-      where: { token },
-    });
+    const invite = await CompanyInvite.findOne({ token }).lean();
 
     if (invite?.status !== "pending" || invite.expiresAt < new Date()) {
       res.status(400).json({ error: "Invalid or expired invite" });
@@ -1347,32 +1310,36 @@ export async function acceptInvite(
     }
 
     // Mark invite as accepted
-    await prisma.companyInvite.update({
-      where: { id: invite.id },
-      data: { status: "accepted" },
-    });
+    await CompanyInvite.updateOne(
+      { _id: invite._id },
+      { $set: { status: "accepted" } },
+    );
 
     // Update roster entry
-    await prisma.marketerCandidate.updateMany({
-      where: {
+    await MarketerCandidate.updateMany(
+      {
         companyId: invite.companyId,
         candidateEmail: invite.candidateEmail,
       },
-      data: {
-        inviteStatus: "accepted",
-        candidateId: req.user?.userId || "",
+      {
+        $set: {
+          inviteStatus: "accepted",
+          candidateId: req.user?.userId || "",
+        },
       },
-    });
+    );
 
     // If candidate has a profile, link it to the company
     if (req.user?.userId) {
-      await prisma.candidateProfile.updateMany({
-        where: { candidateId: req.user!.userId },
-        data: {
-          companyId: invite.companyId,
-          companyName: invite.companyName,
+      await CandidateProfile.updateMany(
+        { candidateId: req.user!.userId },
+        {
+          $set: {
+            companyId: invite.companyId,
+            companyName: invite.companyName,
+          },
         },
-      });
+      );
     }
 
     res.json({
@@ -1403,14 +1370,15 @@ export async function searchCompanies(
       return;
     }
 
-    const docs = await prisma.company.findMany({
-      where: { name: { contains: q, mode: "insensitive" } },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-      take: 20,
-    });
+    const escaped = q.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rx = new RegExp(escaped, "i");
+    const docs = await Company.find({ name: { $regex: rx } })
+      .select("_id name")
+      .sort({ name: 1 })
+      .limit(20)
+      .lean();
 
-    res.json(docs.map((d) => ({ id: d.id, name: d.name })));
+    res.json(docs.map((d) => ({ id: d._id, name: d.name })));
   } catch (err) {
     next(err);
   }
@@ -1440,20 +1408,18 @@ export async function forwardOpeningWithEmail(
       return;
     }
 
-    const company = await prisma.company.findUnique({
-      where: { marketerId: req.user!.userId },
-    });
+    const company = await Company.findOne({
+      marketerId: req.user!.userId,
+    }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
       return;
     }
 
-    const mc = await prisma.marketerCandidate.findFirst({
-      where: {
-        companyId: company.id,
-        candidateEmail: candidateEmail.trim().toLowerCase(),
-      },
-    });
+    const mc = await MarketerCandidate.findOne({
+      companyId: company._id,
+      candidateEmail: candidateEmail.trim().toLowerCase(),
+    }).lean();
 
     if (!mc) {
       res.status(403).json({
@@ -1463,34 +1429,32 @@ export async function forwardOpeningWithEmail(
       return;
     }
 
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    const job = await Job.findOne({ _id: jobId }).lean();
     if (!job) {
       res.status(404).json({ error: "Job not found" });
       return;
     }
 
     try {
-      const doc = await prisma.forwardedOpening.create({
-        data: {
-          marketerId: req.user!.userId,
-          marketerEmail: req.user!.email,
-          companyId: company.id,
-          companyName: company.name,
-          candidateEmail: candidateEmail.trim().toLowerCase(),
-          candidateName: mc.candidateName || candidateEmail.trim(),
-          jobId: job.id,
-          jobTitle: job.title,
-          jobLocation: job.location,
-          jobType: job.jobType,
-          jobSubType: job.jobSubType,
-          vendorEmail: job.vendorEmail,
-          skillsRequired: job.skillsRequired,
-          payPerHour: job.payPerHour ?? undefined,
-          salaryMin: job.salaryMin ?? undefined,
-          salaryMax: job.salaryMax ?? undefined,
-          note: (note || "").trim(),
-          status: "pending",
-        },
+      const doc = await ForwardedOpening.create({
+        marketerId: req.user!.userId,
+        marketerEmail: req.user!.email,
+        companyId: company._id,
+        companyName: company.name,
+        candidateEmail: candidateEmail.trim().toLowerCase(),
+        candidateName: mc.candidateName || candidateEmail.trim(),
+        jobId: job._id,
+        jobTitle: job.title,
+        jobLocation: job.location,
+        jobType: job.jobType,
+        jobSubType: job.jobSubType,
+        vendorEmail: job.vendorEmail,
+        skillsRequired: job.skillsRequired,
+        payPerHour: job.payPerHour ?? undefined,
+        salaryMin: job.salaryMin ?? undefined,
+        salaryMax: job.salaryMax ?? undefined,
+        note: (note || "").trim(),
+        status: "pending",
       });
 
       // Send email notification to candidate
@@ -1515,7 +1479,7 @@ export async function forwardOpeningWithEmail(
       }).catch((err) => console.error("[Forward Email] Send failed:", err));
 
       res.status(201).json({
-        id: doc.id,
+        id: doc._id,
         job_title: doc.jobTitle,
         candidate_email: doc.candidateEmail,
         status: doc.status,
@@ -1523,7 +1487,7 @@ export async function forwardOpeningWithEmail(
         created_at: doc.createdAt?.toISOString() ?? "",
       });
     } catch (e) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
+      if ((e as any).code === 11000) {
         res.status(409).json({
           error: "This opening was already forwarded to this candidate",
         });
@@ -1565,12 +1529,12 @@ export async function updateForwardedStatus(
       return;
     }
 
-    const doc = await prisma.forwardedOpening.updateMany({
-      where: { id, marketerId: req.user!.userId },
-      data: { status },
-    });
+    const doc = await ForwardedOpening.updateMany(
+      { _id: id, marketerId: req.user!.userId },
+      { $set: { status } },
+    );
 
-    if (doc.count === 0) {
+    if (doc.modifiedCount === 0) {
       res.status(404).json({ error: "Forwarded opening not found" });
       return;
     }
@@ -1599,61 +1563,66 @@ export async function getCandidateMyDetail(
     const email = req.user!.email.toLowerCase();
 
     // Profile
-    const profile = await prisma.candidateProfile.findFirst({
-      where: { email },
-    });
+    const profile = await CandidateProfile.findOne({ email }).lean();
 
-    // Applications (projects) with ALL financials across all marketers
+    // Applications (projects) — separate job + financials lookups
     const applications = profile?.candidateId
-      ? await prisma.application.findMany({
-          where: { candidateId: profile.candidateId },
-          include: {
-            job: {
-              select: {
-                id: true,
-                title: true,
-                vendorEmail: true,
-                location: true,
-                jobType: true,
-                jobSubType: true,
-                payPerHour: true,
-                salaryMin: true,
-                salaryMax: true,
-                isActive: true,
-                createdAt: true,
-              },
-            },
-            financials: { orderBy: { createdAt: "desc" } },
-          },
-          orderBy: { createdAt: "desc" },
-        })
+      ? await Application.find({ candidateId: profile.candidateId })
+          .sort({ createdAt: -1 })
+          .lean()
       : [];
 
+    const appJobIds = [...new Set(applications.map((a) => a.jobId))];
+    const appJobs = appJobIds.length
+      ? await Job.find({ _id: { $in: appJobIds } })
+          .select(
+            "title vendorEmail location jobType jobSubType payPerHour salaryMin salaryMax isActive createdAt",
+          )
+          .lean()
+      : [];
+    const jobMap = new Map(appJobs.map((j) => [j._id, j]));
+
+    const appIds = applications.map((a) => a._id);
+    const allFinancials = appIds.length
+      ? await ProjectFinancial.find({ applicationId: { $in: appIds } })
+          .sort({ createdAt: -1 })
+          .lean()
+      : [];
+    const finByAppId: Record<string, any[]> = {};
+    for (const f of allFinancials) {
+      if (!finByAppId[f.applicationId]) {
+        finByAppId[f.applicationId] = [];
+      }
+      finByAppId[f.applicationId].push(f);
+    }
+
     // Forwarded openings from ALL marketers
-    const forwarded = await prisma.forwardedOpening.findMany({
-      where: { candidateEmail: email },
-      orderBy: { createdAt: "desc" },
-    });
+    const forwarded = await ForwardedOpening.find({ candidateEmail: email })
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Poke / email activity sent TO this candidate
-    const targetIds = [profile?.id, profile?.candidateId].filter(
+    const targetIds = [profile?._id, profile?.candidateId].filter(
       Boolean,
     ) as string[];
     const pokeRecords = targetIds.length
-      ? await prisma.pokeRecord.findMany({
-          where: { targetId: { in: targetIds } },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-        })
+      ? await PokeRecord.find({ targetId: { $in: targetIds } })
+          .sort({ createdAt: -1 })
+          .limit(100)
+          .lean()
       : [];
 
-    // Marketer roster entries that include this candidate
-    const rosterEntries = await prisma.marketerCandidate.findMany({
-      where: { candidateEmail: email },
-      include: {
-        company: { select: { id: true, name: true } },
-      },
-    });
+    // Marketer roster entries that include this candidate — separate company lookup
+    const rosterEntries = await MarketerCandidate.find({
+      candidateEmail: email,
+    }).lean();
+    const companyIds = [...new Set(rosterEntries.map((r) => r.companyId))];
+    const companies = companyIds.length
+      ? await Company.find({ _id: { $in: companyIds } })
+          .select("_id name")
+          .lean()
+      : [];
+    const companyMap = new Map(companies.map((c) => [c._id, c]));
 
     // Count forwarded openings per marketer for the summary
     const forwardedCountByMarketer = forwarded.reduce<Record<string, number>>(
@@ -1667,7 +1636,7 @@ export async function getCandidateMyDetail(
     res.json({
       profile: profile
         ? {
-            id: profile.id,
+            id: profile._id,
             candidate_id: profile.candidateId,
             name: profile.name,
             email: profile.email,
@@ -1689,44 +1658,48 @@ export async function getCandidateMyDetail(
             resume_achievements: profile.resumeAchievements,
           }
         : null,
-      projects: applications.map((a) => ({
-        id: a.id,
-        job_id: a.jobId,
-        job_title: a.job?.title ?? a.jobTitle,
-        vendor_email: a.job?.vendorEmail ?? "",
-        location: a.job?.location ?? "",
-        job_type: a.job?.jobType ?? "",
-        job_sub_type: a.job?.jobSubType ?? "",
-        pay_per_hour:
-          a.job?.payPerHour == null ? null : Number(a.job.payPerHour),
-        salary_min: a.job?.salaryMin == null ? null : Number(a.job.salaryMin),
-        salary_max: a.job?.salaryMax == null ? null : Number(a.job.salaryMax),
-        status: a.status,
-        is_active: a.job?.isActive ?? false,
-        applied_at: a.createdAt?.toISOString() ?? "",
-        financials: a.financials.map((fin) => ({
-          id: fin.id,
-          marketer_id: fin.marketerId,
-          billRate: Number(fin.billRate),
-          payRate: Number(fin.payRate),
-          hoursWorked: Number(fin.hoursWorked),
-          projectStart: fin.projectStart?.toISOString() ?? null,
-          projectEnd: fin.projectEnd?.toISOString() ?? null,
-          stateCode: fin.stateCode,
-          stateTaxPct: Number(fin.stateTaxPct),
-          cashPct: Number(fin.cashPct),
-          totalBilled: Number(fin.totalBilled),
-          totalPay: Number(fin.totalPay),
-          taxAmount: Number(fin.taxAmount),
-          cashAmount: Number(fin.cashAmount),
-          netPayable: Number(fin.netPayable),
-          amountPaid: Number(fin.amountPaid),
-          amountPending: Number(fin.amountPending),
-          notes: fin.notes,
-        })),
-      })),
+      projects: applications.map((a) => {
+        const aJob = jobMap.get(a.jobId);
+        const fins = finByAppId[a._id] ?? [];
+        return {
+          id: a._id,
+          job_id: a.jobId,
+          job_title: aJob?.title ?? a.jobTitle,
+          vendor_email: aJob?.vendorEmail ?? "",
+          location: aJob?.location ?? "",
+          job_type: aJob?.jobType ?? "",
+          job_sub_type: aJob?.jobSubType ?? "",
+          pay_per_hour:
+            aJob?.payPerHour == null ? null : Number(aJob.payPerHour),
+          salary_min: aJob?.salaryMin == null ? null : Number(aJob.salaryMin),
+          salary_max: aJob?.salaryMax == null ? null : Number(aJob.salaryMax),
+          status: a.status,
+          is_active: aJob?.isActive ?? false,
+          applied_at: a.createdAt?.toISOString() ?? "",
+          financials: fins.map((fin: any) => ({
+            id: fin._id,
+            marketer_id: fin.marketerId,
+            billRate: Number(fin.billRate),
+            payRate: Number(fin.payRate),
+            hoursWorked: Number(fin.hoursWorked),
+            projectStart: fin.projectStart?.toISOString() ?? null,
+            projectEnd: fin.projectEnd?.toISOString() ?? null,
+            stateCode: fin.stateCode,
+            stateTaxPct: Number(fin.stateTaxPct),
+            cashPct: Number(fin.cashPct),
+            totalBilled: Number(fin.totalBilled),
+            totalPay: Number(fin.totalPay),
+            taxAmount: Number(fin.taxAmount),
+            cashAmount: Number(fin.cashAmount),
+            netPayable: Number(fin.netPayable),
+            amountPaid: Number(fin.amountPaid),
+            amountPending: Number(fin.amountPending),
+            notes: fin.notes,
+          })),
+        };
+      }),
       forwarded_openings: forwarded.map((f) => ({
-        id: f.id,
+        id: f._id,
         job_id: f.jobId,
         job_title: f.jobTitle,
         job_location: f.jobLocation,
@@ -1740,7 +1713,7 @@ export async function getCandidateMyDetail(
         created_at: f.createdAt?.toISOString() ?? "",
       })),
       vendor_activity: pokeRecords.map((p) => ({
-        id: p.id,
+        id: p._id,
         sender_email: p.senderEmail,
         sender_name: p.senderName,
         sender_type: p.senderType,
@@ -1750,10 +1723,10 @@ export async function getCandidateMyDetail(
         created_at: p.createdAt?.toISOString() ?? "",
       })),
       marketer_info: rosterEntries.map((mc) => ({
-        id: mc.id,
+        id: mc._id,
         marketer_id: mc.marketerId,
         company_id: mc.companyId,
-        company_name: mc.company?.name ?? "",
+        company_name: companyMap.get(mc.companyId)?.name ?? "",
         invite_status: mc.inviteStatus,
         invite_sent_at: mc.inviteSentAt?.toISOString() ?? null,
         forwarded_count: forwardedCountByMarketer[mc.marketerId] ?? 0,

@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { prisma } from "../config/prisma";
+import { Job, CandidateProfile } from "../models";
 
 let prevJobCount = -1;
 let prevProfileCount = -1;
@@ -13,8 +13,8 @@ function jitter(): number {
 
 async function fetchCounts(): Promise<{ jobs: number; profiles: number }> {
   const [realJobs, realProfiles] = await Promise.all([
-    prisma.job.count({ where: { isActive: true } }),
-    prisma.candidateProfile.count(),
+    Job.countDocuments({ isActive: true }),
+    CandidateProfile.countDocuments(),
   ]);
 
   let displayJobs = realJobs;
@@ -50,7 +50,9 @@ export function createCountsWebSocket(): WebSocketServer {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(counts));
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   });
 
   // Broadcast loop — every 30 seconds
@@ -64,7 +66,9 @@ export function createCountsWebSocket(): WebSocketServer {
           client.send(payload);
         }
       });
-    } catch { /* silently skip */ }
+    } catch {
+      /* silently skip */
+    }
   }, 30_000);
 
   return wss;

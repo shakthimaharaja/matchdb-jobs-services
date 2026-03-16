@@ -1,4 +1,4 @@
-// ─── Lightweight interfaces for matching (mirror Prisma Job & CandidateProfile) ─
+// ─── Lightweight interfaces for matching (mirror Mongoose Job & CandidateProfile) ─
 
 interface IJob {
   _id?: string;

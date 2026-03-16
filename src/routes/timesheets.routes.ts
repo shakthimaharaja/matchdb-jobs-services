@@ -13,8 +13,11 @@
  */
 
 import { Router, Request, Response } from "express";
-import { prisma } from "../config/prisma";
-import { requireCandidate, requireMarketer } from "../middleware/auth.middleware";
+import { Timesheet, MarketerCandidate, Company } from "../models";
+import {
+  requireCandidate,
+  requireMarketer,
+} from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -54,17 +57,19 @@ function isSubmittable(weekStart: Date): boolean {
  */
 router.get("/", requireCandidate, async (req: Request, res: Response) => {
   const { userId } = req.user!;
-  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "25"), 10)));
+  const pageParam = typeof req.query.page === "string" ? req.query.page : "1";
+  const limitParam =
+    typeof req.query.limit === "string" ? req.query.limit : "25";
+  const page = Math.max(1, Number.parseInt(pageParam, 10));
+  const limit = Math.min(50, Math.max(1, Number.parseInt(limitParam, 10)));
 
   const [timesheets, total] = await Promise.all([
-    prisma.timesheet.findMany({
-      where: { candidateId: userId },
-      orderBy: { weekStart: "desc" },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.timesheet.count({ where: { candidateId: userId } }),
+    Timesheet.find({ candidateId: userId })
+      .sort({ weekStart: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    Timesheet.countDocuments({ candidateId: userId }),
   ]);
 
   res.json({ data: timesheets, total, page, limit });
@@ -82,9 +87,18 @@ router.get("/", requireCandidate, async (req: Request, res: Response) => {
 router.post("/", requireCandidate, async (req: Request, res: Response) => {
   const { userId, email } = req.user!;
 
-  const { weekStart: weekStartInput, entries, candidateName } = req.body as {
+  const {
+    weekStart: weekStartInput,
+    entries,
+    candidateName,
+  } = req.body as {
     weekStart: string;
-    entries: { date: string; day: string; hoursWorked: number; notes?: string }[];
+    entries: {
+      date: string;
+      day: string;
+      hoursWorked: number;
+      notes?: string;
+    }[];
     candidateName?: string;
   };
 
@@ -95,7 +109,10 @@ router.post("/", requireCandidate, async (req: Request, res: Response) => {
 
   const weekStart = getWeekStart(new Date(weekStartInput));
   const weekEnd = getWeekEnd(weekStart);
-  const totalHours = entries.reduce((sum, e) => sum + Number(e.hoursWorked || 0), 0);
+  const totalHours = entries.reduce(
+    (sum, e) => sum + Number(e.hoursWorked || 0),
+    0,
+  );
 
   // Look up marketer/company relationship (accepted invite)
   let marketerId = "";
@@ -103,22 +120,27 @@ router.post("/", requireCandidate, async (req: Request, res: Response) => {
   let companyId = "";
   let companyName = "";
 
-  const roster = await prisma.marketerCandidate.findFirst({
-    where: { candidateEmail: email, inviteStatus: "accepted" },
-    include: { company: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const roster = await MarketerCandidate.findOne({
+    candidateEmail: email,
+    inviteStatus: "accepted",
+  })
+    .sort({ createdAt: -1 })
+    .lean();
   if (roster) {
+    const comp = await Company.findOne({ _id: roster.companyId })
+      .select("name marketerEmail")
+      .lean();
     marketerId = roster.marketerId;
-    marketerEmail = roster.company?.marketerEmail || "";
+    marketerEmail = comp?.marketerEmail || "";
     companyId = roster.companyId;
-    companyName = roster.company?.name || "";
+    companyName = comp?.name || "";
   }
 
   // Check existing
-  const existing = await prisma.timesheet.findUnique({
-    where: { candidateId_weekStart: { candidateId: userId, weekStart } },
-  });
+  const existing = await Timesheet.findOne({
+    candidateId: userId,
+    weekStart,
+  }).lean();
 
   if (existing && existing.status !== "draft") {
     res.status(409).json({
@@ -127,33 +149,28 @@ router.post("/", requireCandidate, async (req: Request, res: Response) => {
     return;
   }
 
-  const upserted = await prisma.timesheet.upsert({
-    where: { candidateId_weekStart: { candidateId: userId, weekStart } },
-    create: {
-      candidateId: userId,
-      candidateEmail: email,
-      candidateName: candidateName || "",
-      marketerId,
-      marketerEmail,
-      companyId,
-      companyName,
-      weekStart,
-      weekEnd,
-      entries,
-      totalHours,
-      status: "draft",
+  const upserted = await Timesheet.findOneAndUpdate(
+    { candidateId: userId, weekStart },
+    {
+      $set: {
+        candidateName: candidateName || existing?.candidateName || "",
+        marketerId,
+        marketerEmail,
+        companyId,
+        companyName,
+        weekEnd,
+        entries,
+        totalHours,
+      },
+      $setOnInsert: {
+        candidateId: userId,
+        candidateEmail: email,
+        weekStart,
+        status: "draft",
+      },
     },
-    update: {
-      candidateName: candidateName || existing?.candidateName || "",
-      marketerId,
-      marketerEmail,
-      companyId,
-      companyName,
-      weekEnd,
-      entries,
-      totalHours,
-    },
-  });
+    { upsert: true, new: true },
+  ).lean();
 
   res.json(upserted);
 });
@@ -162,30 +179,42 @@ router.post("/", requireCandidate, async (req: Request, res: Response) => {
  * PATCH /api/jobs/timesheets/:id/submit
  * Submit a draft timesheet. Only allowed on Saturday or later.
  */
-router.patch("/:id/submit", requireCandidate, async (req: Request, res: Response) => {
-  const { userId } = req.user!;
-  const { id } = req.params;
+router.patch(
+  "/:id/submit",
+  requireCandidate,
+  async (req: Request, res: Response) => {
+    const { userId } = req.user!;
+    const { id } = req.params;
 
-  const ts = await prisma.timesheet.findUnique({ where: { id } });
-  if (!ts) { res.status(404).json({ error: "Timesheet not found" }); return; }
-  if (ts.candidateId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (ts.status !== "draft") {
-    res.status(409).json({ error: `Timesheet is already "${ts.status}"` });
-    return;
-  }
-  if (!isSubmittable(ts.weekStart)) {
-    res.status(400).json({
-      error: "Timesheet can only be submitted on Saturday or later (after the week ends)",
-    });
-    return;
-  }
+    const ts = await Timesheet.findOne({ _id: id }).lean();
+    if (!ts) {
+      res.status(404).json({ error: "Timesheet not found" });
+      return;
+    }
+    if (ts.candidateId !== userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    if (ts.status !== "draft") {
+      res.status(409).json({ error: `Timesheet is already "${ts.status}"` });
+      return;
+    }
+    if (!isSubmittable(ts.weekStart)) {
+      res.status(400).json({
+        error:
+          "Timesheet can only be submitted on Saturday or later (after the week ends)",
+      });
+      return;
+    }
 
-  const updated = await prisma.timesheet.update({
-    where: { id },
-    data: { status: "submitted", submittedAt: new Date() },
-  });
-  res.json(updated);
-});
+    const updated = await Timesheet.findOneAndUpdate(
+      { _id: id },
+      { $set: { status: "submitted", submittedAt: new Date() } },
+      { new: true },
+    ).lean();
+    res.json(updated);
+  },
+);
 
 // ── Marketer routes ───────────────────────────────────────────────────────────
 
@@ -195,22 +224,21 @@ router.patch("/:id/submit", requireCandidate, async (req: Request, res: Response
  */
 router.get("/pending", requireMarketer, async (req: Request, res: Response) => {
   const { userId } = req.user!;
-  const status = String(req.query.status || "submitted");
+  const status =
+    typeof req.query.status === "string" ? req.query.status : "submitted";
 
   // Find roster candidates for this marketer
-  const rosterEmails = await prisma.marketerCandidate.findMany({
-    where: { marketerId: userId },
-    select: { candidateEmail: true },
-  });
+  const rosterEmails = await MarketerCandidate.find({ marketerId: userId })
+    .select("candidateEmail")
+    .lean();
   const emails = rosterEmails.map((r) => r.candidateEmail);
 
-  const timesheets = await prisma.timesheet.findMany({
-    where: {
-      candidateEmail: { in: emails },
-      ...(status === "all" ? {} : { status }),
-    },
-    orderBy: [{ status: "asc" }, { weekStart: "desc" }],
-  });
+  const filter: any = { candidateEmail: { $in: emails } };
+  if (status !== "all") filter.status = status;
+
+  const timesheets = await Timesheet.find(filter)
+    .sort({ status: 1, weekStart: -1 })
+    .lean();
 
   res.json({ data: timesheets, total: timesheets.length });
 });
@@ -219,48 +247,90 @@ router.get("/pending", requireMarketer, async (req: Request, res: Response) => {
  * PATCH /api/jobs/timesheets/:id/approve
  * Marketer approves a submitted timesheet.
  */
-router.patch("/:id/approve", requireMarketer, async (req: Request, res: Response) => {
-  const { userId } = req.user!;
-  const { id } = req.params;
-  const { notes } = req.body as { notes?: string };
+router.patch(
+  "/:id/approve",
+  requireMarketer,
+  async (req: Request, res: Response) => {
+    const { userId } = req.user!;
+    const { id } = req.params;
+    const { notes } = req.body as { notes?: string };
 
-  const ts = await prisma.timesheet.findUnique({ where: { id } });
-  if (!ts) { res.status(404).json({ error: "Timesheet not found" }); return; }
-  if (ts.marketerId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (ts.status !== "submitted") {
-    res.status(409).json({ error: `Cannot approve a timesheet with status "${ts.status}"` });
-    return;
-  }
+    const ts = await Timesheet.findOne({ _id: id }).lean();
+    if (!ts) {
+      res.status(404).json({ error: "Timesheet not found" });
+      return;
+    }
+    if (ts.marketerId !== userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    if (ts.status !== "submitted") {
+      res
+        .status(409)
+        .json({
+          error: `Cannot approve a timesheet with status "${ts.status}"`,
+        });
+      return;
+    }
 
-  const updated = await prisma.timesheet.update({
-    where: { id },
-    data: { status: "approved", approvedAt: new Date(), approverNotes: notes || "" },
-  });
-  res.json(updated);
-});
+    const updated = await Timesheet.findOneAndUpdate(
+      { _id: id },
+      {
+        $set: {
+          status: "approved",
+          approvedAt: new Date(),
+          approverNotes: notes || "",
+        },
+      },
+      { new: true },
+    ).lean();
+    res.json(updated);
+  },
+);
 
 /**
  * PATCH /api/jobs/timesheets/:id/reject
  * Marketer rejects a submitted timesheet (returns it to draft for correction).
  */
-router.patch("/:id/reject", requireMarketer, async (req: Request, res: Response) => {
-  const { userId } = req.user!;
-  const { id } = req.params;
-  const { notes } = req.body as { notes?: string };
+router.patch(
+  "/:id/reject",
+  requireMarketer,
+  async (req: Request, res: Response) => {
+    const { userId } = req.user!;
+    const { id } = req.params;
+    const { notes } = req.body as { notes?: string };
 
-  const ts = await prisma.timesheet.findUnique({ where: { id } });
-  if (!ts) { res.status(404).json({ error: "Timesheet not found" }); return; }
-  if (ts.marketerId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (ts.status !== "submitted") {
-    res.status(409).json({ error: `Cannot reject a timesheet with status "${ts.status}"` });
-    return;
-  }
+    const ts = await Timesheet.findOne({ _id: id }).lean();
+    if (!ts) {
+      res.status(404).json({ error: "Timesheet not found" });
+      return;
+    }
+    if (ts.marketerId !== userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    if (ts.status !== "submitted") {
+      res
+        .status(409)
+        .json({
+          error: `Cannot reject a timesheet with status "${ts.status}"`,
+        });
+      return;
+    }
 
-  const updated = await prisma.timesheet.update({
-    where: { id },
-    data: { status: "draft", approverNotes: notes || "", submittedAt: null },
-  });
-  res.json(updated);
-});
+    const updated = await Timesheet.findOneAndUpdate(
+      { _id: id },
+      {
+        $set: {
+          status: "draft",
+          approverNotes: notes || "",
+          submittedAt: null,
+        },
+      },
+      { new: true },
+    ).lean();
+    res.json(updated);
+  },
+);
 
 export default router;

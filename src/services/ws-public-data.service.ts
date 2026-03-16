@@ -4,17 +4,17 @@
  * WebSocket endpoint: /ws/public-data
  *
  * On every new client connection → immediately sends the current snapshot.
- * Every 30 seconds → queries PostgreSQL for active jobs & profiles,
+ * Every 30 seconds → queries MongoDB for active jobs & profiles,
  * diffs against the previous snapshot, and broadcasts the full dataset
  * along with arrays of changed IDs so the UI can flash those rows.
  */
 import { WebSocketServer, WebSocket } from "ws";
-import { prisma } from "../config/prisma";
+import { Job, CandidateProfile } from "../models";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function camelToSnake(str: string): string {
-  return str.replace(/([A-Z])/g, "_$1").toLowerCase();
+  return str.replaceAll(/([A-Z])/g, "_$1").toLowerCase();
 }
 
 function toSnakeCase(obj: Record<string, unknown>): Record<string, unknown> {
@@ -26,11 +26,11 @@ function toSnakeCase(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 function jobToJSON(job: Record<string, unknown>): Record<string, unknown> {
-  return toSnakeCase({ ...job, id: job.id });
+  return toSnakeCase({ ...job, id: job._id });
 }
 
 function profileToJSON(p: Record<string, unknown>): Record<string, unknown> {
-  return toSnakeCase({ ...p, id: p.id });
+  return toSnakeCase({ ...p, id: p._id });
 }
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -134,26 +134,14 @@ async function fetchSnapshot(): Promise<{
   deletedProfiles: Record<string, unknown>[];
 }> {
   const [rawJobs, rawProfiles] = await Promise.all([
-    prisma.job.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "desc" },
-      take: MAX_ROWS,
-    }),
-    prisma.candidateProfile.findMany({
-      select: {
-        id: true,
-        name: true,
-        currentRole: true,
-        currentCompany: true,
-        preferredJobType: true,
-        experienceYears: true,
-        expectedHourlyRate: true,
-        skills: true,
-        location: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: MAX_ROWS,
-    }),
+    Job.find({ isActive: true }).sort({ createdAt: -1 }).limit(MAX_ROWS).lean(),
+    CandidateProfile.find()
+      .select(
+        "_id name currentRole currentCompany preferredJobType experienceYears expectedHourlyRate skills location",
+      )
+      .sort({ createdAt: -1 })
+      .limit(MAX_ROWS)
+      .lean(),
   ]);
 
   const jobs = rawJobs.map((j) =>

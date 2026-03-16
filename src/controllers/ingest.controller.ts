@@ -2,13 +2,13 @@
  * ingest.controller.ts
  *
  * Internal API called by matchdb-data-collection-mono after successful uploads.
- * Maps MongoDB (data-collection) field names → Prisma PostgreSQL schema.
+ * Maps MongoDB (data-collection) field names → Mongoose MongoDB schema.
  * Skips records already present (dedup by email for profiles, title+company+location for jobs).
  * After insert → triggers immediate /ws/public-data broadcast + SSE data_changed event.
  */
 import type { Request, Response } from "express";
 import { randomUUID } from "node:crypto";
-import { prisma } from "../config/prisma";
+import { Job, CandidateProfile } from "../models";
 import { triggerPublicDataBroadcast } from "../services/ws-public-data.service";
 import { broadcastSSEEvent } from "../services/sse.service";
 import { env } from "../config/env";
@@ -78,8 +78,8 @@ function mapJobRecord(r: CollectionJob) {
 function slugify(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
     .slice(0, 40);
 }
 
@@ -130,20 +130,29 @@ export async function ingestJobs(req: Request, res: Response): Promise<void> {
     }
 
     // Dedup: skip if same title+company+location already exists for system vendor
-    const existing = await prisma.job.findFirst({
-      where: {
-        vendorId: env.SYSTEM_VENDOR_ID,
-        title: { equals: r.title, mode: "insensitive" },
-        location: { equals: r.location ?? "", mode: "insensitive" },
+    const existing = await Job.findOne({
+      vendorId: env.SYSTEM_VENDOR_ID,
+      title: {
+        $regex: new RegExp(
+          `^${r.title.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "i",
+        ),
       },
-      select: { id: true },
-    });
+      location: {
+        $regex: new RegExp(
+          `^${(r.location ?? "").replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "i",
+        ),
+      },
+    })
+      .select("_id")
+      .lean();
     if (existing) {
       skipped++;
       continue;
     }
 
-    await prisma.job.create({ data: mapJobRecord(r) });
+    await Job.create(mapJobRecord(r));
     inserted++;
   }
 
@@ -185,16 +194,22 @@ export async function ingestProfiles(
     }
 
     // Dedup: skip if same email already has a profile
-    const existing = await prisma.candidateProfile.findFirst({
-      where: { email: { equals: r.email.toLowerCase(), mode: "insensitive" } },
-      select: { id: true },
-    });
+    const existing = await CandidateProfile.findOne({
+      email: {
+        $regex: new RegExp(
+          `^${r.email.toLowerCase().replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "i",
+        ),
+      },
+    })
+      .select("_id")
+      .lean();
     if (existing) {
       skipped++;
       continue;
     }
 
-    await prisma.candidateProfile.create({ data: mapProfileRecord(r) });
+    await CandidateProfile.create(mapProfileRecord(r));
     inserted++;
   }
 
