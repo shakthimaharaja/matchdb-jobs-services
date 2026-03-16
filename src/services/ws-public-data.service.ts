@@ -10,28 +10,7 @@
  */
 import { WebSocketServer, WebSocket } from "ws";
 import { Job, CandidateProfile } from "../models";
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-function camelToSnake(str: string): string {
-  return str.replaceAll(/([A-Z])/g, "_$1").toLowerCase();
-}
-
-function toSnakeCase(obj: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    result[camelToSnake(key)] = value;
-  }
-  return result;
-}
-
-function jobToJSON(job: Record<string, unknown>): Record<string, unknown> {
-  return toSnakeCase({ ...job, id: job._id });
-}
-
-function profileToJSON(p: Record<string, unknown>): Record<string, unknown> {
-  return toSnakeCase({ ...p, id: p._id });
-}
+import { toSnakeCase, jobToJSON, profileToJSON } from "../utils";
 
 // ── State ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +21,8 @@ let prevJobMap = new Map<string, string>();
 let prevProfileMap = new Map<string, string>();
 
 /** Cached payloads so we can send immediately on new connections */
+import { WS_BROADCAST_INTERVAL_MS, WS_MAX_ROWS } from "../constants";
+
 let lastJobsPayload: Record<string, unknown>[] = [];
 let lastProfilesPayload: Record<string, unknown>[] = [];
 
@@ -49,8 +30,8 @@ let lastProfilesPayload: Record<string, unknown>[] = [];
 let prevJobObjects = new Map<string, Record<string, unknown>>();
 let prevProfileObjects = new Map<string, Record<string, unknown>>();
 
-const BROADCAST_INTERVAL_MS = 30_000;
-const MAX_ROWS = 25;
+const BROADCAST_INTERVAL_MS = WS_BROADCAST_INTERVAL_MS;
+const MAX_ROWS = WS_MAX_ROWS;
 
 // ── Diff helper ─────────────────────────────────────────────────────────────
 

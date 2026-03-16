@@ -273,7 +273,7 @@ CLIENT_URL=http://localhost:3000
 
 ## API Documentation (Swagger)
 
-Interactive API docs at **http://localhost:8001/api-docs**. OpenAPI 3.0 spec defined in `src/config/swagger.ts`.
+Interactive API docs at **http://localhost:8001/api-docs**. All 63 endpoints are documented in the OpenAPI 3.0 spec (`src/config/swagger.ts`), organized by tags: Public, Candidate, Profile, Vendor, Shared, Resume, Jobs, Marketer, Financials, Timesheets, Interviews, Invites, Realtime, Internal.
 
 ---
 

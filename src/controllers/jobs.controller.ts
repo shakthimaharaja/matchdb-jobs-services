@@ -15,80 +15,14 @@ import {
 import { sendPokeEmail } from "../services/sendgrid.service";
 import { extractSkills } from "../services/skill-extractor.service";
 import { AppError } from "../middleware/error.middleware";
-
-// --- Plan Limit Tables --------------------------------------------------------
-
-const JOB_POSTING_LIMITS: Record<string, number> = {
-  free: 0,
-  basic: 5,
-  pro: 10,
-  pro_plus: 20,
-  enterprise: Infinity,
-};
-
-const POKE_LIMITS: Record<string, number> = {
-  free: 5,
-  basic: 25,
-  pro: 50,
-  pro_plus: Infinity,
-  enterprise: Infinity,
-};
-
-// Converts camelCase keys to snake_case for frontend consumption
-function camelToSnake(str: string): string {
-  return str.replaceAll(/([A-Z])/g, "_$1").toLowerCase();
-}
-
-function toSnakeCase(obj: any): any {
-  if (Array.isArray(obj)) return obj.map(toSnakeCase);
-  if (obj && typeof obj === "object" && !(obj instanceof Date)) {
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[camelToSnake(key)] = toSnakeCase(value);
-    }
-    return result;
-  }
-  return obj;
-}
-
-// Converts snake_case keys to camelCase for Mongoose
-function snakeToCamel(str: string): string {
-  return str.replaceAll(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
-}
-
-function toCamelCase(obj: any): any {
-  if (Array.isArray(obj)) return obj.map(toCamelCase);
-  if (obj && typeof obj === "object" && !(obj instanceof Date)) {
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[snakeToCamel(key)] = toCamelCase(value);
-    }
-    return result;
-  }
-  return obj;
-}
-
-function jobToJSON(job: any): any {
-  return toSnakeCase({ ...job, id: job._id || job.id });
-}
-
-function profileToJSON(p: any): any {
-  return toSnakeCase({ ...p, id: p._id || p.id });
-}
-
-// Pagination helper � parses page/limit from query string
-function parsePagination(query: any): {
-  page: number;
-  limit: number;
-  skip: number;
-} {
-  const page = Math.max(1, Number.parseInt(query.page as string, 10) || 1);
-  const limit = Math.min(
-    100,
-    Math.max(1, Number.parseInt(query.limit as string, 10) || 25),
-  );
-  return { page, limit, skip: (page - 1) * limit };
-}
+import {
+  toSnakeCase,
+  toCamelCase,
+  jobToJSON,
+  profileToJSON,
+  parsePagination,
+} from "../utils";
+import { JOB_POSTING_LIMITS, POKE_LIMITS } from "../constants";
 
 // GET /api/jobs/count � lightweight count of active jobs
 export async function countJobs(

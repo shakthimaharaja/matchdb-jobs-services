@@ -11,13 +11,7 @@ import {
   ProjectFinancial,
 } from "../models";
 import { sendPokeEmail } from "../services/sendgrid.service";
-
-/** Safely coerce any value to a number (null/undefined → 0). */
-function toNum(v: unknown): number {
-  if (v == null) return 0;
-  if (typeof v === "number") return v;
-  return Number(v);
-}
+import { toNum } from "../utils";
 
 // --- Marketer: Dashboard Stats ------------------------------------------------
 

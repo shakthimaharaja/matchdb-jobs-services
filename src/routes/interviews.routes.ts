@@ -15,6 +15,7 @@ import { Router, Request, Response } from "express";
 import { InterviewInvite } from "../models";
 import { requireVendor, requireCandidate } from "../middleware/auth.middleware";
 import { sendInterviewInviteEmail } from "../services/sendgrid.service";
+import { GOOGLE_MEET_BASE } from "../constants";
 
 const router = Router();
 
@@ -27,7 +28,7 @@ function generateMeetLink(): string {
     Array.from({ length: n }, () => chars[Math.floor(Math.random() * 26)]).join(
       "",
     );
-  return `https://meet.google.com/${seg(3)}-${seg(4)}-${seg(3)}`;
+  return `${GOOGLE_MEET_BASE}/${seg(3)}-${seg(4)}-${seg(3)}`;
 }
 
 // ── Vendor routes ─────────────────────────────────────────────────────────────
