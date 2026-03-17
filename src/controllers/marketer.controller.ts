@@ -264,8 +264,9 @@ export async function registerCompany(
 ): Promise<void> {
   try {
     const { name } = req.body as { name?: string };
-    if (!name?.trim()) {
-      res.status(400).json({ error: "Company name is required" });
+    const trimmedName = name?.trim() || "";
+    if (!trimmedName || trimmedName.length < 2 || trimmedName.length > 100) {
+      res.status(400).json({ error: "Company name must be 2-100 characters" });
       return;
     }
     const marketerId = req.user!.userId;

@@ -2,6 +2,7 @@ import express from "express";
 import compression from "compression";
 import cors from "cors";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import jobsRoutes from "./routes/jobs.routes";
@@ -24,6 +25,8 @@ import { addSSEClient } from "./services/sse.service";
 
 const app = express();
 
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+
 // Gzip compression — reduces API response size 60-80%
 app.use(compression());
 
@@ -38,6 +41,7 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(limiter);
 
 // Public: list all companies (for candidate/vendor registration dropdowns)
 app.get("/api/jobs/companies", listCompanies);

@@ -12,7 +12,7 @@
  *   PATCH  /:id/reject          marketer  — reject
  */
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { Timesheet, MarketerCandidate, Company } from "../models";
 import {
   requireCandidate,
@@ -55,24 +55,28 @@ function isSubmittable(weekStart: Date): boolean {
  * GET /api/jobs/timesheets
  * Returns all timesheets for the logged-in candidate, newest first.
  */
-router.get("/", requireCandidate, async (req: Request, res: Response) => {
-  const { userId } = req.user!;
-  const pageParam = typeof req.query.page === "string" ? req.query.page : "1";
-  const limitParam =
-    typeof req.query.limit === "string" ? req.query.limit : "25";
-  const page = Math.max(1, Number.parseInt(pageParam, 10));
-  const limit = Math.min(50, Math.max(1, Number.parseInt(limitParam, 10)));
+router.get("/", requireCandidate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { userId } = req.user!;
+    const pageParam = typeof req.query.page === "string" ? req.query.page : "1";
+    const limitParam =
+      typeof req.query.limit === "string" ? req.query.limit : "25";
+    const page = Math.max(1, Number.parseInt(pageParam, 10));
+    const limit = Math.min(50, Math.max(1, Number.parseInt(limitParam, 10)));
 
-  const [timesheets, total] = await Promise.all([
-    Timesheet.find({ candidateId: userId })
-      .sort({ weekStart: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean(),
-    Timesheet.countDocuments({ candidateId: userId }),
-  ]);
+    const [timesheets, total] = await Promise.all([
+      Timesheet.find({ candidateId: userId })
+        .sort({ weekStart: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Timesheet.countDocuments({ candidateId: userId }),
+    ]);
 
-  res.json({ data: timesheets, total, page, limit });
+    res.json({ data: timesheets, total, page, limit });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -84,7 +88,8 @@ router.get("/", requireCandidate, async (req: Request, res: Response) => {
  *   - draft → update allowed
  *   - submitted/approved/rejected → 409 conflict
  */
-router.post("/", requireCandidate, async (req: Request, res: Response) => {
+router.post("/", requireCandidate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
   const { userId, email } = req.user!;
 
   const {
@@ -173,6 +178,9 @@ router.post("/", requireCandidate, async (req: Request, res: Response) => {
   ).lean();
 
   res.json(upserted);
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -182,37 +190,41 @@ router.post("/", requireCandidate, async (req: Request, res: Response) => {
 router.patch(
   "/:id/submit",
   requireCandidate,
-  async (req: Request, res: Response) => {
-    const { userId } = req.user!;
-    const { id } = req.params;
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.user!;
+      const { id } = req.params;
 
-    const ts = await Timesheet.findOne({ _id: id }).lean();
-    if (!ts) {
-      res.status(404).json({ error: "Timesheet not found" });
-      return;
-    }
-    if (ts.candidateId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    if (ts.status !== "draft") {
-      res.status(409).json({ error: `Timesheet is already "${ts.status}"` });
-      return;
-    }
-    if (!isSubmittable(ts.weekStart)) {
-      res.status(400).json({
-        error:
-          "Timesheet can only be submitted on Saturday or later (after the week ends)",
-      });
-      return;
-    }
+      const ts = await Timesheet.findOne({ _id: id }).lean();
+      if (!ts) {
+        res.status(404).json({ error: "Timesheet not found" });
+        return;
+      }
+      if (ts.candidateId !== userId) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      if (ts.status !== "draft") {
+        res.status(409).json({ error: `Timesheet is already "${ts.status}"` });
+        return;
+      }
+      if (!isSubmittable(ts.weekStart)) {
+        res.status(400).json({
+          error:
+            "Timesheet can only be submitted on Saturday or later (after the week ends)",
+        });
+        return;
+      }
 
-    const updated = await Timesheet.findOneAndUpdate(
-      { _id: id },
-      { $set: { status: "submitted", submittedAt: new Date() } },
-      { new: true },
-    ).lean();
-    res.json(updated);
+      const updated = await Timesheet.findOneAndUpdate(
+        { _id: id },
+        { $set: { status: "submitted", submittedAt: new Date() } },
+        { new: true },
+      ).lean();
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
   },
 );
 
@@ -222,25 +234,29 @@ router.patch(
  * GET /api/jobs/timesheets/pending
  * Marketer: list submitted timesheets from their roster candidates.
  */
-router.get("/pending", requireMarketer, async (req: Request, res: Response) => {
-  const { userId } = req.user!;
-  const status =
-    typeof req.query.status === "string" ? req.query.status : "submitted";
+router.get("/pending", requireMarketer, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { userId } = req.user!;
+    const status =
+      typeof req.query.status === "string" ? req.query.status : "submitted";
 
-  // Find roster candidates for this marketer
-  const rosterEmails = await MarketerCandidate.find({ marketerId: userId })
-    .select("candidateEmail")
-    .lean();
-  const emails = rosterEmails.map((r) => r.candidateEmail);
+    // Find roster candidates for this marketer
+    const rosterEmails = await MarketerCandidate.find({ marketerId: userId })
+      .select("candidateEmail")
+      .lean();
+    const emails = rosterEmails.map((r) => r.candidateEmail);
 
-  const filter: any = { candidateEmail: { $in: emails } };
-  if (status !== "all") filter.status = status;
+    const filter: any = { candidateEmail: { $in: emails } };
+    if (status !== "all") filter.status = status;
 
-  const timesheets = await Timesheet.find(filter)
-    .sort({ status: 1, weekStart: -1 })
-    .lean();
+    const timesheets = await Timesheet.find(filter)
+      .sort({ status: 1, weekStart: -1 })
+      .lean();
 
-  res.json({ data: timesheets, total: timesheets.length });
+    res.json({ data: timesheets, total: timesheets.length });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -250,41 +266,45 @@ router.get("/pending", requireMarketer, async (req: Request, res: Response) => {
 router.patch(
   "/:id/approve",
   requireMarketer,
-  async (req: Request, res: Response) => {
-    const { userId } = req.user!;
-    const { id } = req.params;
-    const { notes } = req.body as { notes?: string };
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.user!;
+      const { id } = req.params;
+      const { notes } = req.body as { notes?: string };
 
-    const ts = await Timesheet.findOne({ _id: id }).lean();
-    if (!ts) {
-      res.status(404).json({ error: "Timesheet not found" });
-      return;
-    }
-    if (ts.marketerId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    if (ts.status !== "submitted") {
-      res
-        .status(409)
-        .json({
-          error: `Cannot approve a timesheet with status "${ts.status}"`,
-        });
-      return;
-    }
+      const ts = await Timesheet.findOne({ _id: id }).lean();
+      if (!ts) {
+        res.status(404).json({ error: "Timesheet not found" });
+        return;
+      }
+      if (ts.marketerId !== userId) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      if (ts.status !== "submitted") {
+        res
+          .status(409)
+          .json({
+            error: `Cannot approve a timesheet with status "${ts.status}"`,
+          });
+        return;
+      }
 
-    const updated = await Timesheet.findOneAndUpdate(
-      { _id: id },
-      {
-        $set: {
-          status: "approved",
-          approvedAt: new Date(),
-          approverNotes: notes || "",
+      const updated = await Timesheet.findOneAndUpdate(
+        { _id: id },
+        {
+          $set: {
+            status: "approved",
+            approvedAt: new Date(),
+            approverNotes: notes || "",
+          },
         },
-      },
-      { new: true },
-    ).lean();
-    res.json(updated);
+        { new: true },
+      ).lean();
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
   },
 );
 
@@ -295,41 +315,45 @@ router.patch(
 router.patch(
   "/:id/reject",
   requireMarketer,
-  async (req: Request, res: Response) => {
-    const { userId } = req.user!;
-    const { id } = req.params;
-    const { notes } = req.body as { notes?: string };
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.user!;
+      const { id } = req.params;
+      const { notes } = req.body as { notes?: string };
 
-    const ts = await Timesheet.findOne({ _id: id }).lean();
-    if (!ts) {
-      res.status(404).json({ error: "Timesheet not found" });
-      return;
-    }
-    if (ts.marketerId !== userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    if (ts.status !== "submitted") {
-      res
-        .status(409)
-        .json({
-          error: `Cannot reject a timesheet with status "${ts.status}"`,
-        });
-      return;
-    }
+      const ts = await Timesheet.findOne({ _id: id }).lean();
+      if (!ts) {
+        res.status(404).json({ error: "Timesheet not found" });
+        return;
+      }
+      if (ts.marketerId !== userId) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      if (ts.status !== "submitted") {
+        res
+          .status(409)
+          .json({
+            error: `Cannot reject a timesheet with status "${ts.status}"`,
+          });
+        return;
+      }
 
-    const updated = await Timesheet.findOneAndUpdate(
-      { _id: id },
-      {
-        $set: {
-          status: "draft",
-          approverNotes: notes || "",
-          submittedAt: null,
+      const updated = await Timesheet.findOneAndUpdate(
+        { _id: id },
+        {
+          $set: {
+            status: "draft",
+            approverNotes: notes || "",
+            submittedAt: null,
+          },
         },
-      },
-      { new: true },
-    ).lean();
-    res.json(updated);
+        { new: true },
+      ).lean();
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
   },
 );
 

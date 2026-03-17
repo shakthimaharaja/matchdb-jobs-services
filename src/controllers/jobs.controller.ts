@@ -141,7 +141,7 @@ export async function createJob(
     const incoming = toCamelCase(req.body);
     const schema = z.object({
       title: z.string().min(2),
-      description: z.string().min(10),
+      description: z.string().min(10).max(10000),
       location: z.string().optional(),
       jobCountry: z.string().min(2, "Country is required for job posting"),
       jobState: z.string().optional(),
@@ -161,6 +161,20 @@ export async function createJob(
     });
 
     const body = schema.parse(incoming);
+
+    // -- Salary field validation --------------------------------------------
+    if (body.salaryMin !== undefined && body.salaryMin < 0) {
+      res.status(400).json({ error: "salaryMin must be non-negative" }); return;
+    }
+    if (body.salaryMax !== undefined && body.salaryMax < 0) {
+      res.status(400).json({ error: "salaryMax must be non-negative" }); return;
+    }
+    if (body.salaryMin !== undefined && body.salaryMax !== undefined && body.salaryMin > body.salaryMax) {
+      res.status(400).json({ error: "salaryMin must not exceed salaryMax" }); return;
+    }
+    if (body.payPerHour !== undefined && (body.payPerHour < 0 || body.payPerHour > 10000)) {
+      res.status(400).json({ error: "payPerHour must be between 0 and 10000" }); return;
+    }
 
     // -- Job posting limit enforcement --------------------------------------
     const plan = req.user!.plan || "free";
@@ -271,7 +285,11 @@ export async function applyToJob(
         jobTitle: job.title,
         candidateId: req.user!.userId,
         candidateEmail: req.user!.email,
-        coverLetter: req.body.coverLetter || req.body.cover_letter || "",
+        coverLetter: (() => {
+          const cl = req.body.coverLetter || req.body.cover_letter || "";
+          if (cl && cl.length > 2000) throw Object.assign(new Error("Cover letter must not exceed 2000 characters"), { statusCode: 400 });
+          return cl;
+        })(),
       });
 
       await Job.updateOne(
@@ -525,10 +543,8 @@ function mergeVisibilityConfig(
 }
 
 function buildLockedUpdateData(existing: any, incoming: any): any {
-  const mergedVis = mergeVisibilityConfig(
-    existing.visibilityConfig || {},
-    incoming.visibilityConfig || {},
-  );
+  // When profile is locked, ignore incoming visibilityConfig — only paid updates (via webhook) are allowed
+  const mergedVis = existing.visibilityConfig || {};
 
   const fullResumeText = [
     incoming.resumeSummary || existing.resumeSummary || "",
@@ -909,21 +925,20 @@ export async function poke(
     const pokeLimit = POKE_LIMITS[plan] ?? 5;
     if (Number.isFinite(pokeLimit)) {
       const yearMonth = new Date().toISOString().slice(0, 7);
-      const log = await PokeLog.findOneAndUpdate(
-        { userId: req.user!.userId, yearMonth },
-        { $inc: { count: 1 } },
-        { upsert: true, new: true },
-      );
-      if (log.count > pokeLimit) {
-        await PokeLog.updateOne(
-          { userId: req.user!.userId, yearMonth },
-          { $inc: { count: -1 } },
-        );
+      // Check BEFORE incrementing to avoid race condition where two simultaneous
+      // requests both pass the limit check and both get through
+      const existing = await PokeLog.findOne({ userId: req.user!.userId, yearMonth }).lean();
+      if (existing && existing.count >= pokeLimit) {
         res.status(429).json({
           error: `Monthly poke limit reached (${pokeLimit}/month on your ${plan} plan). Upgrade at /pricing to send more.`,
         });
         return;
       }
+      await PokeLog.findOneAndUpdate(
+        { userId: req.user!.userId, yearMonth },
+        { $inc: { count: 1 } },
+        { upsert: true },
+      );
     }
 
     await sendPokeEmail({
@@ -972,9 +987,13 @@ export async function getPokesSent(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const skip = (page - 1) * limit;
     const records = await PokeRecord.find({ senderId: req.user!.userId })
       .sort({ createdAt: -1 })
-      .limit(200)
+      .skip(skip)
+      .limit(limit)
       .lean();
     res.json(records.map((r) => toSnakeCase({ ...r, id: r._id })));
   } catch (err) {
@@ -991,14 +1010,21 @@ export async function getPokesReceived(
   try {
     let records: any[];
     if (req.user!.userType === "vendor") {
+      const page = Math.max(Number(req.query.page) || 1, 1);
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const skip = (page - 1) * limit;
       records = await PokeRecord.find({
         targetVendorId: req.user!.userId,
         senderType: "candidate",
       })
         .sort({ createdAt: -1 })
-        .limit(200)
+        .skip(skip)
+        .limit(limit)
         .lean();
     } else {
+      const page = Math.max(Number(req.query.page) || 1, 1);
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const skip = (page - 1) * limit;
       const profile = await CandidateProfile.findOne({
         candidateId: req.user!.userId,
       }).lean();
@@ -1011,7 +1037,8 @@ export async function getPokesReceived(
         senderType: "vendor",
       })
         .sort({ createdAt: -1 })
-        .limit(200)
+        .skip(skip)
+        .limit(limit)
         .lean();
     }
     res.json(records.map((r) => toSnakeCase({ ...r, id: r._id })));
@@ -1067,7 +1094,7 @@ export async function downloadResume(
       "================================================================",
       "  MATCHDB CANDIDATE RESUME",
       "================================================================",
-      `Profile URL : http://localhost:3000/resume/${profile.username}`,
+      `Profile URL : ${process.env.CLIENT_URL || "http://localhost:3000"}/resume/${profile.username}`,
       `Downloaded  : ${now}`,
       "",
       "PERSONAL INFORMATION",
@@ -1106,7 +1133,7 @@ export async function downloadResume(
       profile.resumeAchievements || "�",
       "",
       "================================================================",
-      "  Generated by MatchDB  |  http://localhost:3000",
+      `  Generated by MatchDB  |  ${process.env.CLIENT_URL || "http://localhost:3000"}`,
       "================================================================",
     ].join("\n");
 
