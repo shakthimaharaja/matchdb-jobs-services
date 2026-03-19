@@ -25,7 +25,12 @@ import { addSSEClient } from "./services/sse.service";
 
 const app = express();
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Gzip compression — reduces API response size 60-80%
 app.use(compression());

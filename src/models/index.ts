@@ -10,3 +10,5 @@ export { CompanyInvite } from "./CompanyInvite";
 export { ProjectFinancial } from "./ProjectFinancial";
 export { Timesheet } from "./Timesheet";
 export { InterviewInvite } from "./InterviewInvite";
+export { ClientCompany } from "./ClientCompany";
+export { VendorCompany } from "./VendorCompany";

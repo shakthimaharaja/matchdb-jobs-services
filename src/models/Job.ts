@@ -22,6 +22,8 @@ export interface IJob {
   experienceRequired: number;
   applicationCount: number;
   isActive: boolean;
+  clientCompanyId: string;
+  vendorCompanyId: string;
   sourceUserId: string;
   sourceCompanyId: string;
   createdAt: Date;
@@ -54,6 +56,8 @@ const JobSchema = new Schema<IJob>(
     experienceRequired: { type: Number, default: 0 },
     applicationCount: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    clientCompanyId: { type: String, default: "" },
+    vendorCompanyId: { type: String, default: "" },
     sourceUserId: { type: String, default: "" },
     sourceCompanyId: { type: String, default: "" },
   },
@@ -63,5 +67,7 @@ const JobSchema = new Schema<IJob>(
 JobSchema.index({ vendorId: 1, createdAt: -1 });
 JobSchema.index({ isActive: 1, createdAt: -1 });
 JobSchema.index({ sourceUserId: 1 });
+JobSchema.index({ clientCompanyId: 1 });
+JobSchema.index({ vendorCompanyId: 1 });
 
 export const Job = mongoose.model<IJob>("Job", JobSchema);

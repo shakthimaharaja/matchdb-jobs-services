@@ -16,6 +16,8 @@ import {
   forwardOpeningWithEmail,
   updateForwardedStatus,
   getCompanySummary,
+  getClientCompanies,
+  getVendorCompanies,
 } from "../controllers/marketer.controller";
 
 const router = Router();
@@ -29,6 +31,10 @@ router.get("/profiles", requireMarketer, getMarketerProfiles);
 router.post("/company", requireMarketer, registerCompany);
 router.get("/company", requireMarketer, getMyCompany);
 router.get("/company-summary", requireMarketer, getCompanySummary);
+
+// Client & vendor company lookups
+router.get("/client-companies", requireMarketer, getClientCompanies);
+router.get("/vendor-companies", requireMarketer, getVendorCompanies);
 
 // Company candidate roster
 router.post("/candidates", requireMarketer, addMarketerCandidate);

@@ -30,6 +30,8 @@ import {
   ProjectFinancial,
   Timesheet,
   InterviewInvite,
+  ClientCompany,
+  VendorCompany,
 } from "../models";
 
 /* ── helpers ────────────────────────────────────────────────────────── */
@@ -112,6 +114,153 @@ async function seedBulk() {
   }
   const COMPANY_ID = company._id as string;
   const COMPANY_NAME = (company as { name: string }).name; // "Alpha Staffing Solutions"
+
+  /* ================================================================ */
+  /*  CLEAN UP previous bulk-seed data                                 */
+  /* ================================================================ */
+  const BULK_CANDIDATE_IDS = [
+    C11,
+    C12,
+    C13,
+    C14,
+    C15,
+    C16,
+    C17,
+    C18,
+    C19,
+    C20,
+    C21,
+    C22,
+    C23,
+    C24,
+    C25,
+    C26,
+    C27,
+    C28,
+    C29,
+    C30,
+  ];
+  await Job.deleteMany({ vendorId: ADMIN_VENDOR });
+  await CandidateProfile.deleteMany({
+    candidateId: { $in: BULK_CANDIDATE_IDS },
+  });
+  await Application.deleteMany({ candidateId: { $in: BULK_CANDIDATE_IDS } });
+  await MarketerCandidate.deleteMany({ marketerId: ADMIN_MARKETER });
+  await ForwardedOpening.deleteMany({ marketerId: ADMIN_MARKETER });
+  await ProjectFinancial.deleteMany({ marketerId: ADMIN_MARKETER });
+  await Timesheet.deleteMany({ marketerId: ADMIN_MARKETER });
+  await PokeRecord.deleteMany({
+    $or: [
+      {
+        senderId: {
+          $in: [ADMIN_VENDOR, ADMIN_MARKETER, ...BULK_CANDIDATE_IDS],
+        },
+      },
+      {
+        targetId: {
+          $in: [ADMIN_VENDOR, ADMIN_MARKETER, ...BULK_CANDIDATE_IDS],
+        },
+      },
+    ],
+  });
+  await PokeLog.deleteMany({ userId: { $in: BULK_CANDIDATE_IDS } });
+  await InterviewInvite.deleteMany({ vendorId: ADMIN_VENDOR });
+  await ClientCompany.deleteMany({ marketerId: ADMIN_MARKETER });
+  await VendorCompany.deleteMany({ marketerId: ADMIN_MARKETER });
+  console.log("  ✓ Cleaned up previous bulk-seed data");
+
+  /* ================================================================ */
+  /*  CLIENT & VENDOR COMPANIES — lookup tables                        */
+  /* ================================================================ */
+
+  const CC_GOOGLE = oid();
+  const CC_AMAZON = oid();
+  const CC_META = oid();
+  const CC_MICROSOFT = oid();
+  const CC_NETFLIX = oid();
+
+  const clientCompanies = await ClientCompany.insertMany([
+    { _id: CC_GOOGLE, name: "Google", marketerId: ADMIN_MARKETER },
+    { _id: CC_AMAZON, name: "Amazon", marketerId: ADMIN_MARKETER },
+    { _id: CC_META, name: "Meta", marketerId: ADMIN_MARKETER },
+    { _id: CC_MICROSOFT, name: "Microsoft", marketerId: ADMIN_MARKETER },
+    { _id: CC_NETFLIX, name: "Netflix", marketerId: ADMIN_MARKETER },
+  ]);
+  console.log(`  ✓ Created ${clientCompanies.length} client companies`);
+
+  const ccByName: Record<string, string> = {
+    Google: CC_GOOGLE,
+    Amazon: CC_AMAZON,
+    Meta: CC_META,
+    Microsoft: CC_MICROSOFT,
+    Netflix: CC_NETFLIX,
+  };
+
+  const VC_TECHBRIDGE = oid();
+  const VC_PINNACLE = oid();
+  const VC_APEX = oid();
+  const VC_SECURENET = oid();
+
+  const vendorCompanies = await VendorCompany.insertMany([
+    {
+      _id: VC_TECHBRIDGE,
+      name: "TechBridge Staffing",
+      marketerId: ADMIN_MARKETER,
+    },
+    {
+      _id: VC_PINNACLE,
+      name: "Pinnacle Solutions",
+      marketerId: ADMIN_MARKETER,
+    },
+    { _id: VC_APEX, name: "Apex Digital", marketerId: ADMIN_MARKETER },
+    {
+      _id: VC_SECURENET,
+      name: "SecureNet Partners",
+      marketerId: ADMIN_MARKETER,
+    },
+  ]);
+  console.log(`  ✓ Created ${vendorCompanies.length} vendor companies`);
+
+  const vcByName: Record<string, string> = {
+    "TechBridge Staffing": VC_TECHBRIDGE,
+    "Pinnacle Solutions": VC_PINNACLE,
+    "Apex Digital": VC_APEX,
+    "SecureNet Partners": VC_SECURENET,
+  };
+
+  /* Client assignment for jobs — distributes 30 jobs across clients */
+  const jobClientCycle = [
+    CC_GOOGLE, // BJ[0]
+    CC_AMAZON, // BJ[1]
+    CC_MICROSOFT, // BJ[2]
+    CC_AMAZON, // BJ[3]
+    CC_AMAZON, // BJ[4]
+    CC_NETFLIX, // BJ[5]
+    CC_GOOGLE, // BJ[6]
+    CC_MICROSOFT, // BJ[7]
+    CC_META, // BJ[8]
+    CC_GOOGLE, // BJ[9]
+    CC_GOOGLE, // BJ[10]
+    CC_META, // BJ[11]
+    CC_MICROSOFT, // BJ[12]
+    CC_AMAZON, // BJ[13]
+    CC_NETFLIX, // BJ[14]
+    CC_GOOGLE, // BJ[15]
+    CC_AMAZON, // BJ[16]
+    CC_META, // BJ[17]
+    CC_MICROSOFT, // BJ[18]
+    CC_GOOGLE, // BJ[19]
+    CC_AMAZON, // BJ[20]
+    CC_NETFLIX, // BJ[21]
+    CC_META, // BJ[22]
+    CC_GOOGLE, // BJ[23]
+    CC_MICROSOFT, // BJ[24]
+    CC_AMAZON, // BJ[25]
+    CC_META, // BJ[26]
+    CC_GOOGLE, // BJ[27]
+    CC_AMAZON, // BJ[28]
+    CC_NETFLIX, // BJ[29]
+  ];
 
   /* ================================================================ */
   /*  30 NEW JOBS — all posted by admin@vendor.com                     */
@@ -873,6 +1022,17 @@ async function seedBulk() {
     },
   ]);
   console.log(`  ✓ Created ${bulkJobs.length} jobs`);
+
+  /* Assign clientCompanyId to each job */
+  await Job.bulkWrite(
+    BJ.map((id, i) => ({
+      updateOne: {
+        filter: { _id: id },
+        update: { $set: { clientCompanyId: jobClientCycle[i] } },
+      },
+    })),
+  );
+  console.log(`  ✓ Assigned client companies to ${BJ.length} jobs`);
 
   /* ================================================================ */
   /*  20 NEW CANDIDATE PROFILES                                        */
@@ -2754,26 +2914,90 @@ async function seedBulk() {
     ],
   ];
 
+  // Client / pipeline mock data for testing
+  const clientMix = [
+    {
+      clientName: "Google",
+      vendorCompanyName: "",
+      implementationPartner: "",
+      pocName: "Sarah Henderson",
+      pocEmail: "sarah.h@google.com",
+    },
+    {
+      clientName: "Amazon",
+      vendorCompanyName: "TechBridge Staffing",
+      implementationPartner: "TCS",
+      pocName: "Mike Jensen",
+      pocEmail: "mike.j@amazon.com",
+    },
+    {
+      clientName: "Meta",
+      vendorCompanyName: "Pinnacle Solutions",
+      implementationPartner: "Wipro",
+      pocName: "Raj Kumar",
+      pocEmail: "raj.k@meta.com",
+    },
+    {
+      clientName: "Microsoft",
+      vendorCompanyName: "",
+      implementationPartner: "",
+      pocName: "Anna Brooks",
+      pocEmail: "anna.b@microsoft.com",
+    },
+    {
+      clientName: "Amazon",
+      vendorCompanyName: "Apex Digital",
+      implementationPartner: "Infosys",
+      pocName: "Lisa Wang",
+      pocEmail: "lisa.w@amazon.com",
+    },
+    {
+      clientName: "Netflix",
+      vendorCompanyName: "SecureNet Partners",
+      implementationPartner: "HCL Tech",
+      pocName: "Chris Park",
+      pocEmail: "chris.p@netflix.com",
+    },
+    {
+      clientName: "Google",
+      vendorCompanyName: "",
+      implementationPartner: "",
+      pocName: "David Tan",
+      pocEmail: "david.t@google.com",
+    },
+    {
+      clientName: "Microsoft",
+      vendorCompanyName: "Apex Digital",
+      implementationPartner: "Cognizant",
+      pocName: "Tom Richardson",
+      pocEmail: "tom.r@microsoft.com",
+    },
+  ];
+
   const financials = await ProjectFinancial.insertMany(
     finRows.map(
-      ([
-        appIdx,
-        cid,
-        cName,
-        jTitle,
-        vName,
-        br,
-        pr,
-        hrs,
-        st,
-        tax,
-        cash,
-        paid,
-        status,
-        start,
-        notes,
-      ]) => {
+      (
+        [
+          appIdx,
+          cid,
+          cName,
+          jTitle,
+          vName,
+          br,
+          pr,
+          hrs,
+          st,
+          tax,
+          cash,
+          paid,
+          status,
+          start,
+          notes,
+        ],
+        idx,
+      ) => {
         const f = fin(br, pr, hrs, tax, cash, paid);
+        const cm = clientMix[idx % clientMix.length];
         return {
           _id: oid(),
           applicationId: BA[appIdx],
@@ -2782,6 +3006,15 @@ async function seedBulk() {
           candidateName: cName,
           jobTitle: jTitle,
           vendorName: vName,
+          vendorCompanyName: cm.vendorCompanyName,
+          vendorCompanyId: cm.vendorCompanyName
+            ? (vcByName[cm.vendorCompanyName] ?? "")
+            : "",
+          clientName: cm.clientName,
+          clientCompanyId: ccByName[cm.clientName] ?? "",
+          implementationPartner: cm.implementationPartner,
+          pocName: cm.pocName,
+          pocEmail: cm.pocEmail,
           ...f,
           projectStart: new Date(start),
           projectEnd: status === "completed" ? daysAgo(30) : null,

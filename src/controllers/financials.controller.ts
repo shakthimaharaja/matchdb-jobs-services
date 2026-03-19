@@ -215,6 +215,11 @@ export async function upsertProjectFinancial(
       cashPct,
       amountPaid,
       notes,
+      clientName,
+      vendorCompanyName,
+      implementationPartner,
+      pocName,
+      pocEmail,
     } = req.body as {
       applicationId: string;
       candidateId?: string;
@@ -228,6 +233,11 @@ export async function upsertProjectFinancial(
       cashPct: number;
       amountPaid: number;
       notes?: string;
+      clientName?: string;
+      vendorCompanyName?: string;
+      implementationPartner?: string;
+      pocName?: string;
+      pocEmail?: string;
     };
 
     if (!applicationId) {
@@ -275,6 +285,11 @@ export async function upsertProjectFinancial(
       amountPaid: Number(amountPaid) || 0,
       amountPending: computed.amountPending,
       notes: notes ?? "",
+      clientName: clientName ?? "",
+      vendorCompanyName: vendorCompanyName ?? "",
+      implementationPartner: implementationPartner ?? "",
+      pocName: pocName ?? "",
+      pocEmail: pocEmail ?? "",
     };
 
     const record = await ProjectFinancial.findOneAndUpdate(
@@ -377,6 +392,11 @@ function formatFinancial(r: any) {
     amountPaid: toNum(r.amountPaid),
     amountPending: toNum(r.amountPending),
     notes: r.notes,
+    clientName: r.clientName ?? "",
+    vendorCompanyName: r.vendorCompanyName ?? "",
+    implementationPartner: r.implementationPartner ?? "",
+    pocName: r.pocName ?? "",
+    pocEmail: r.pocEmail ?? "",
     createdAt: r.createdAt?.toISOString?.() ?? r.createdAt ?? "",
     updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt ?? "",
   };

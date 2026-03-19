@@ -9,6 +9,8 @@ import {
   ForwardedOpening,
   CompanyInvite,
   ProjectFinancial,
+  ClientCompany,
+  VendorCompany,
 } from "../models";
 import { sendPokeEmail } from "../services/sendgrid.service";
 import { toNum } from "../utils";
@@ -82,12 +84,38 @@ export async function getMarketerJobs(
     if (search) {
       const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const rx = new RegExp(escaped, "i");
-      where.$or = [
+
+      // Find matching client/vendor company IDs so we can search jobs by company
+      const [matchingClients, matchingVendors] = await Promise.all([
+        ClientCompany.find({ name: { $regex: rx } })
+          .select("_id")
+          .lean(),
+        VendorCompany.find({ name: { $regex: rx } })
+          .select("_id")
+          .lean(),
+      ]);
+      const ccIds = matchingClients.map((c) => c._id);
+      const vcIds = matchingVendors.map((v) => v._id);
+
+      const orClauses: any[] = [
         { title: { $regex: rx } },
         { location: { $regex: rx } },
         { skillsRequired: search },
       ];
+      if (ccIds.length) orClauses.push({ clientCompanyId: { $in: ccIds } });
+      if (vcIds.length) orClauses.push({ vendorCompanyId: { $in: vcIds } });
+      where.$or = orClauses;
     }
+
+    // Build client/vendor company name lookup maps
+    const [allClients, allVendors] = await Promise.all([
+      ClientCompany.find().select("_id name").lean(),
+      VendorCompany.find().select("_id name").lean(),
+    ]);
+    const ccNameMap: Record<string, string> = {};
+    for (const c of allClients) ccNameMap[c._id] = c.name;
+    const vcNameMap: Record<string, string> = {};
+    for (const v of allVendors) vcNameMap[v._id] = v.name;
 
     const [total, docs] = await Promise.all([
       Job.countDocuments(where),
@@ -138,6 +166,14 @@ export async function getMarketerJobs(
       poke_count: pokeMap[j._id]?.pokes ?? 0,
       email_count: pokeMap[j._id]?.emails ?? 0,
       is_active: j.isActive,
+      client_company_id: j.clientCompanyId ?? "",
+      client_company_name: j.clientCompanyId
+        ? (ccNameMap[j.clientCompanyId] ?? "")
+        : "",
+      vendor_company_id: j.vendorCompanyId ?? "",
+      vendor_company_name: j.vendorCompanyId
+        ? (vcNameMap[j.vendorCompanyId] ?? "")
+        : "",
       created_at: j.createdAt?.toISOString() ?? "",
     }));
 
@@ -276,7 +312,7 @@ export async function registerCompany(
     let company: any = await Company.findOne({ marketerId }).lean();
     if (!company) {
       company = (
-        await Company.create({ name: name.trim(), marketerId, marketerEmail })
+        await Company.create({ name: trimmedName, marketerId, marketerEmail })
       ).toObject();
     }
 
@@ -642,6 +678,13 @@ export async function getCompanySummary(
         candidateEmail: email,
         jobTitle: aJob?.title ?? a.jobTitle,
         vendorEmail: aJob?.vendorEmail ?? "",
+        vendorCompanyName: fin?.vendorCompanyName ?? "",
+        vendorCompanyId: fin?.vendorCompanyId ?? "",
+        clientName: fin?.clientName ?? "",
+        clientCompanyId: fin?.clientCompanyId ?? aJob?.clientCompanyId ?? "",
+        implementationPartner: fin?.implementationPartner ?? "",
+        pocName: fin?.pocName ?? "",
+        pocEmail: fin?.pocEmail ?? "",
         location: aJob?.location ?? "",
         jobType: aJob?.jobType ?? "",
         jobSubType: aJob?.jobSubType ?? "",
@@ -1728,6 +1771,40 @@ export async function getCandidateMyDetail(
         created_at: mc.createdAt?.toISOString() ?? "",
       })),
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Client Companies --------------------------------------------------------
+
+export async function getClientCompanies(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const docs = await ClientCompany.find({ marketerId: req.user!.userId })
+      .sort({ name: 1 })
+      .lean();
+    res.json(docs.map((d) => ({ id: d._id, name: d.name })));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Vendor Companies --------------------------------------------------------
+
+export async function getVendorCompanies(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const docs = await VendorCompany.find({ marketerId: req.user!.userId })
+      .sort({ name: 1 })
+      .lean();
+    res.json(docs.map((d) => ({ id: d._id, name: d.name })));
   } catch (err) {
     next(err);
   }
