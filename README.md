@@ -6,16 +6,16 @@ Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for t
 
 ## Tech Stack
 
-| Layer      | Technology                                         |
-| ---------- | -------------------------------------------------- |
-| Runtime    | Node.js + TypeScript                               |
-| Framework  | Express 4                                          |
-| Database   | MongoDB Atlas via Mongoose 8                       |
-| Auth       | JWT verification (tokens issued by shell-services) |
-| Email      | SendGrid                                           |
-| Matching   | Skill-based scoring engine + skill extraction      |
-| Validation | Zod                                                |
-| Security   | Helmet, CORS, compression                          |
+| Layer      | Technology                                                            |
+| ---------- | --------------------------------------------------------------------- |
+| Runtime    | Node.js + TypeScript                                                  |
+| Framework  | Express 4                                                             |
+| Database   | MongoDB Atlas via Mongoose 8                                          |
+| Auth       | JWT verification (tokens issued by shell-services)                    |
+| Email      | SendGrid                                                              |
+| Matching   | Skill-based scoring engine + skill extraction                         |
+| Validation | Zod                                                                   |
+| Security   | Helmet, CORS, compression                                             |
 | Realtime   | Polling endpoints + SSE (live counts, public data, dashboard refresh) |
 
 ---
@@ -205,9 +205,9 @@ matchdb-jobs-services/
 
 ### Polling Endpoints
 
-| Method | Path                      | Description                                                      |
-| ------ | ------------------------- | ---------------------------------------------------------------- |
-| GET    | `/api/jobs/poll/counts`      | Returns `{ jobs, profiles }` counts                             |
+| Method | Path                         | Description                                                                 |
+| ------ | ---------------------------- | --------------------------------------------------------------------------- |
+| GET    | `/api/jobs/poll/counts`      | Returns `{ jobs, profiles }` counts                                         |
 | GET    | `/api/jobs/poll/public-data` | Returns job + profile snapshots with diff tracking (changedIds, deletedIds) |
 
 ---
