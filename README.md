@@ -16,7 +16,7 @@ Jobs, Candidate Profiles, Applications, Matching, Pokes & Marketer backend for t
 | Matching   | Skill-based scoring engine + skill extraction      |
 | Validation | Zod                                                |
 | Security   | Helmet, CORS, compression                          |
-| Realtime   | WebSocket (ws) — live counts & public data feeds   |
+| Realtime   | Polling endpoints + SSE (live counts, public data, dashboard refresh) |
 
 ---
 
@@ -70,7 +70,7 @@ See the [root README](../README.md) for full test account credentials.
 ```
 matchdb-jobs-services/
 ├── src/
-│   ├── index.ts               # Entry point — HTTP server + WebSocket upgrade routing
+│   ├── index.ts               # Entry point — starts Express server
 │   ├── app.ts                 # Express app (routes, middleware, Swagger)
 │   ├── config/
 │   │   ├── env.ts             # Environment variable loading & validation
@@ -108,8 +108,8 @@ matchdb-jobs-services/
 │   │   ├── skill-extractor.service.ts # Auto-extract skills from text
 │   │   ├── sendgrid.service.ts       # Email dispatch
 │   │   ├── sse.service.ts            # Server-Sent Events for live refresh
-│   │   ├── ws-counts.service.ts      # WebSocket /ws/counts
-│   │   └── ws-public-data.service.ts # WebSocket /ws/public-data
+│   │   ├── poll-counts.service.ts    # GET /api/jobs/poll/counts
+│   │   └── poll-public-data.service.ts # GET /api/jobs/poll/public-data
 │   └── scripts/
 │       └── seed.ts                 # Database seed script
 ├── env/
@@ -203,12 +203,12 @@ matchdb-jobs-services/
 | POST   | `/api/interviews/`            | Vendor | Create interview invite  |
 | PATCH  | `/api/interviews/:id/respond` | Yes    | Accept/decline an invite |
 
-### WebSocket Endpoints
+### Polling Endpoints
 
-| Path              | Description                                                |
-| ----------------- | ---------------------------------------------------------- |
-| `/ws/counts`      | Broadcasts `{ jobs, profiles }` counts every 30 s          |
-| `/ws/public-data` | Broadcasts full job + profile snapshots with diff tracking |
+| Method | Path                      | Description                                                      |
+| ------ | ------------------------- | ---------------------------------------------------------------- |
+| GET    | `/api/jobs/poll/counts`      | Returns `{ jobs, profiles }` counts                             |
+| GET    | `/api/jobs/poll/public-data` | Returns job + profile snapshots with diff tracking (changedIds, deletedIds) |
 
 ---
 
@@ -246,7 +246,7 @@ NODE_ENV=local
 MONGO_URI=mongodb+srv://...@matchdb.rhutf6s.mongodb.net/matchdb-jobs?retryWrites=true&w=majority
 JWT_SECRET=dev-jwt-secret-change-in-production-min-32-chars
 SENDGRID_API_KEY=
-CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:4000,http://localhost:4001
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 CLIENT_URL=http://localhost:3000
 ```
 

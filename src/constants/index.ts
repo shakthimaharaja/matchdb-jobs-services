@@ -21,9 +21,8 @@ export const POKE_LIMITS: Record<string, number> = {
   enterprise: Infinity,
 };
 
-// ─── WebSocket Config ──────────────────────────────────────────────────────────
+// ─── Polling Config ────────────────────────────────────────────────────────────
 
-export const WS_BROADCAST_INTERVAL_MS = 30_000;
 export const WS_MAX_ROWS = 25;
 
 // ─── External URLs ─────────────────────────────────────────────────────────────

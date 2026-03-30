@@ -9,7 +9,6 @@
 import type { Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { Job, CandidateProfile } from "../models";
-import { triggerPublicDataBroadcast } from "../services/ws-public-data.service";
 import { broadcastSSEEvent } from "../services/sse.service";
 import { env } from "../config/env";
 
@@ -158,7 +157,6 @@ export async function ingestJobs(req: Request, res: Response): Promise<void> {
 
   // Fire-and-forget broadcasts — don't block the HTTP response
   if (inserted > 0) {
-    triggerPublicDataBroadcast().catch(() => {});
     broadcastSSEEvent("data_changed", {
       type: "jobs",
       inserted,
@@ -214,7 +212,6 @@ export async function ingestProfiles(
   }
 
   if (inserted > 0) {
-    triggerPublicDataBroadcast().catch(() => {});
     broadcastSSEEvent("data_changed", {
       type: "profiles",
       inserted,

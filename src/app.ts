@@ -8,9 +8,12 @@ import { env } from "./config/env";
 import jobsRoutes from "./routes/jobs.routes";
 import marketerRoutes from "./routes/marketer.routes";
 import financialsRoutes from "./routes/financials.routes";
+import vendorFinancialsRoutes from "./routes/vendorFinancials.routes";
 import timesheetsRoutes from "./routes/timesheets.routes";
 import interviewsRoutes from "./routes/interviews.routes";
 import internalRoutes from "./routes/internal.routes";
+import adminRoutes from "./routes/admin.routes";
+import candidateInviteRoutes from "./routes/candidateInvite.routes";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { requireAuth, requireCandidate } from "./middleware/auth.middleware";
@@ -22,6 +25,8 @@ import {
   searchCompanies,
 } from "./controllers/marketer.controller";
 import { addSSEClient } from "./services/sse.service";
+import { getCounts } from "./services/poll-counts.service";
+import { getPublicData } from "./services/poll-public-data.service";
 
 const app = express();
 
@@ -69,15 +74,17 @@ app.get(
 
 app.use("/api/jobs/marketer", marketerRoutes); // must be BEFORE /api/jobs to avoid :id collision
 app.use("/api/jobs/marketer/financials", financialsRoutes);
+app.use("/api/jobs/vendor/financials", vendorFinancialsRoutes);
 app.use("/api/jobs/timesheets", timesheetsRoutes);
 app.use("/api/jobs/interviews", interviewsRoutes);
-app.use("/api/jobs", jobsRoutes);
+app.use("/api/jobs/admin", adminRoutes);
+app.use("/api/jobs/candidate", candidateInviteRoutes);
 
-// Internal: service-to-service ingest (data-collection → MongoDB)
-app.use("/api/internal", internalRoutes);
+// Polling endpoints (replaced WebSocket) — must be BEFORE jobsRoutes to avoid :id collision
+app.get("/api/jobs/poll/counts", getCounts);
+app.get("/api/jobs/poll/public-data", getPublicData);
 
 // SSE: real-time push to dashboard clients — fires when ingest writes new data
-// Must come BEFORE compression so the stream isn't buffered
 app.get("/api/jobs/events", (req, res) => {
   res.set({
     "Content-Type": "text/event-stream",
@@ -90,6 +97,11 @@ app.get("/api/jobs/events", (req, res) => {
   res.write(": connected\n\n");
   addSSEClient(res);
 });
+
+app.use("/api/jobs", jobsRoutes);
+
+// Internal: service-to-service ingest (data-collection → MongoDB)
+app.use("/api/internal", internalRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({
