@@ -171,25 +171,25 @@ matchdb-jobs-services/
 
 ### Employer (Operations)
 
-| Method | Path                                  | Auth     | Description                                     |
-| ------ | ------------------------------------- | -------- | ----------------------------------------------- |
-| GET    | `/api/marketer/stats`                 | Employer | Dashboard stats                                 |
-| GET    | `/api/marketer/jobs`                  | Employer | Browse available jobs (paginated)                |
-| GET    | `/api/marketer/profiles`              | Employer | Browse candidate profiles (paginated)            |
-| POST   | `/api/marketer/company`               | Employer | Register a company                              |
-| GET    | `/api/marketer/company`               | Employer | Get own company                                 |
-| GET    | `/api/marketer/company-summary`       | Employer | Company financial/resource summary              |
-| GET    | `/api/marketer/client-companies`      | Employer | List client companies                           |
-| GET    | `/api/marketer/vendor-companies`      | Employer | List vendor companies                           |
-| POST   | `/api/marketer/candidates`            | Employer | Add candidate to roster                         |
-| GET    | `/api/marketer/candidates`            | Employer | List rostered candidates                        |
-| GET    | `/api/marketer/candidates/:id/detail` | Employer | Full candidate detail (profile, projects)        |
-| DELETE | `/api/marketer/candidates/:id`        | Employer | Remove candidate from roster                    |
-| POST   | `/api/marketer/candidates/:id/invite` | Employer | Send invite link to candidate                   |
-| POST   | `/api/marketer/forward`               | Employer | Forward a job to a candidate                    |
-| POST   | `/api/marketer/forward-with-email`    | Employer | Forward opening + send email notification       |
-| GET    | `/api/marketer/forwarded`             | Employer | List forwarded openings                         |
-| PATCH  | `/api/marketer/forwarded/:id/status`  | Employer | Update forwarded opening status                 |
+| Method | Path                                  | Auth     | Description                               |
+| ------ | ------------------------------------- | -------- | ----------------------------------------- |
+| GET    | `/api/marketer/stats`                 | Employer | Dashboard stats                           |
+| GET    | `/api/marketer/jobs`                  | Employer | Browse available jobs (paginated)         |
+| GET    | `/api/marketer/profiles`              | Employer | Browse candidate profiles (paginated)     |
+| POST   | `/api/marketer/company`               | Employer | Register a company                        |
+| GET    | `/api/marketer/company`               | Employer | Get own company                           |
+| GET    | `/api/marketer/company-summary`       | Employer | Company financial/resource summary        |
+| GET    | `/api/marketer/client-companies`      | Employer | List client companies                     |
+| GET    | `/api/marketer/vendor-companies`      | Employer | List vendor companies                     |
+| POST   | `/api/marketer/candidates`            | Employer | Add candidate to roster                   |
+| GET    | `/api/marketer/candidates`            | Employer | List rostered candidates                  |
+| GET    | `/api/marketer/candidates/:id/detail` | Employer | Full candidate detail (profile, projects) |
+| DELETE | `/api/marketer/candidates/:id`        | Employer | Remove candidate from roster              |
+| POST   | `/api/marketer/candidates/:id/invite` | Employer | Send invite link to candidate             |
+| POST   | `/api/marketer/forward`               | Employer | Forward a job to a candidate              |
+| POST   | `/api/marketer/forward-with-email`    | Employer | Forward opening + send email notification |
+| GET    | `/api/marketer/forwarded`             | Employer | List forwarded openings                   |
+| PATCH  | `/api/marketer/forwarded/:id/status`  | Employer | Update forwarded opening status           |
 
 ### Financials (Marketer)
 
@@ -204,36 +204,36 @@ matchdb-jobs-services/
 
 ### Financials (Employer)
 
-| Method | Path                              | Auth     | Description                  |
-| ------ | --------------------------------- | -------- | ---------------------------- |
-| GET    | `/api/vendor/financials/summary`  | Employer | Employer financial summary   |
+| Method | Path                             | Auth     | Description                |
+| ------ | -------------------------------- | -------- | -------------------------- |
+| GET    | `/api/vendor/financials/summary` | Employer | Employer financial summary |
 
 ### Admin (Company RBAC)
 
-| Method | Path                            | Auth     | Description                                  |
-| ------ | ------------------------------- | -------- | -------------------------------------------- |
-| GET    | `/api/admin/plans`              | No       | List available subscription plans            |
-| POST   | `/api/admin/setup`              | Yes      | One-time company admin onboarding            |
-| GET    | `/api/admin/me`                 | Yes      | Get current user's company context + RBAC    |
-| POST   | `/api/admin/invite`             | Admin    | Send employee invitation email               |
-| GET    | `/api/admin/invitations`        | Admin    | List sent invitations                        |
-| DELETE | `/api/admin/invitations/:id`    | Admin    | Revoke a pending invitation                  |
-| POST   | `/api/admin/register/:token`    | No       | Register via employee invite token           |
-| GET    | `/api/admin/users`              | Yes      | List company users (RBAC-filtered)           |
-| PATCH  | `/api/admin/users/:id/role`     | Admin    | Change a user's role + department            |
-| PATCH  | `/api/admin/users/:id/status`   | Admin    | Activate / deactivate a user                 |
-| GET    | `/api/admin/active-users`       | Yes      | List active users with online status         |
+| Method | Path                          | Auth  | Description                               |
+| ------ | ----------------------------- | ----- | ----------------------------------------- |
+| GET    | `/api/admin/plans`            | No    | List available subscription plans         |
+| POST   | `/api/admin/setup`            | Yes   | One-time company admin onboarding         |
+| GET    | `/api/admin/me`               | Yes   | Get current user's company context + RBAC |
+| POST   | `/api/admin/invite`           | Admin | Send employee invitation email            |
+| GET    | `/api/admin/invitations`      | Admin | List sent invitations                     |
+| DELETE | `/api/admin/invitations/:id`  | Admin | Revoke a pending invitation               |
+| POST   | `/api/admin/register/:token`  | No    | Register via employee invite token        |
+| GET    | `/api/admin/users`            | Yes   | List company users (RBAC-filtered)        |
+| PATCH  | `/api/admin/users/:id/role`   | Admin | Change a user's role + department         |
+| PATCH  | `/api/admin/users/:id/status` | Admin | Activate / deactivate a user              |
+| GET    | `/api/admin/active-users`     | Yes   | List active users with online status      |
 
 ### Timesheets
 
-| Method | Path                           | Auth     | Description                         |
-| ------ | ------------------------------ | -------- | ----------------------------------- |
-| GET    | `/api/timesheets/`             | Yes      | List timesheets for user            |
-| POST   | `/api/timesheets/`             | Yes      | Create/update timesheet             |
-| PATCH  | `/api/timesheets/:id/submit`   | Yes      | Submit timesheet for approval       |
-| GET    | `/api/timesheets/pending`      | Marketer | List submitted timesheets from roster |
-| PATCH  | `/api/timesheets/:id/approve`  | Marketer | Approve a submitted timesheet       |
-| PATCH  | `/api/timesheets/:id/reject`   | Marketer | Reject a submitted timesheet        |
+| Method | Path                          | Auth     | Description                           |
+| ------ | ----------------------------- | -------- | ------------------------------------- |
+| GET    | `/api/timesheets/`            | Yes      | List timesheets for user              |
+| POST   | `/api/timesheets/`            | Yes      | Create/update timesheet               |
+| PATCH  | `/api/timesheets/:id/submit`  | Yes      | Submit timesheet for approval         |
+| GET    | `/api/timesheets/pending`     | Marketer | List submitted timesheets from roster |
+| PATCH  | `/api/timesheets/:id/approve` | Marketer | Approve a submitted timesheet         |
+| PATCH  | `/api/timesheets/:id/reject`  | Marketer | Reject a submitted timesheet          |
 
 ### Interviews
 
@@ -245,19 +245,19 @@ matchdb-jobs-services/
 
 ### Candidate
 
-| Method | Path                            | Auth      | Description                                      |
-| ------ | ------------------------------- | --------- | ------------------------------------------------ |
+| Method | Path                            | Auth      | Description                                         |
+| ------ | ------------------------------- | --------- | --------------------------------------------------- |
 | GET    | `/api/jobs/candidate/my-detail` | Candidate | Full candidate detail (profile, projects, forwards) |
-| GET    | `/api/jobs/candidate/forwarded` | Candidate | List job openings forwarded by employer           |
+| GET    | `/api/jobs/candidate/forwarded` | Candidate | List job openings forwarded by employer             |
 
 ### Invites
 
-| Method | Path                                  | Auth | Description                 |
-| ------ | ------------------------------------- | ---- | --------------------------- |
-| GET    | `/api/jobs/companies`                 | No   | List all companies          |
-| GET    | `/api/jobs/companies/search`          | No   | Fuzzy search companies      |
-| GET    | `/api/jobs/invite/:token`             | No   | Verify an invite token      |
-| POST   | `/api/jobs/invite/:token/accept`      | Yes  | Accept an invite            |
+| Method | Path                             | Auth | Description            |
+| ------ | -------------------------------- | ---- | ---------------------- |
+| GET    | `/api/jobs/companies`            | No   | List all companies     |
+| GET    | `/api/jobs/companies/search`     | No   | Fuzzy search companies |
+| GET    | `/api/jobs/invite/:token`        | No   | Verify an invite token |
+| POST   | `/api/jobs/invite/:token/accept` | Yes  | Accept an invite       |
 
 ### Polling Endpoints
 

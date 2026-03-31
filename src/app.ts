@@ -14,6 +14,16 @@ import interviewsRoutes from "./routes/interviews.routes";
 import internalRoutes from "./routes/internal.routes";
 import adminRoutes from "./routes/admin.routes";
 import candidateInviteRoutes from "./routes/candidateInvite.routes";
+// ADP (People)
+import payrollRoutes from "./routes/payroll.routes";
+// QuickBooks (Money)
+import clientsRoutes from "./routes/clients.routes";
+import invoicesRoutes from "./routes/invoices.routes";
+import vendorsRoutes from "./routes/vendors.routes";
+import billsRoutes from "./routes/bills.routes";
+import financeRoutes from "./routes/finance.routes";
+// Fieldglass (Timesheets)
+import fieldglassRoutes from "./routes/fieldglass.routes";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { requireAuth, requireCandidate } from "./middleware/auth.middleware";
@@ -79,6 +89,19 @@ app.use("/api/jobs/vendor/financials", employerFinancialsRoutes);
 app.use("/api/jobs/timesheets", timesheetsRoutes);
 app.use("/api/jobs/interviews", interviewsRoutes);
 app.use("/api/jobs/admin", adminRoutes);
+
+// ═══ ADP (People) ═══
+app.use("/api/jobs/payroll", payrollRoutes);
+
+// ═══ QuickBooks (Money) ═══
+app.use("/api/jobs/clients", clientsRoutes);
+app.use("/api/jobs/invoices", invoicesRoutes);
+app.use("/api/jobs/vendors", vendorsRoutes);
+app.use("/api/jobs/bills", billsRoutes);
+app.use("/api/jobs/finance", financeRoutes);
+
+// ═══ Fieldglass (Timesheets) ═══
+app.use("/api/jobs/fieldglass", fieldglassRoutes);
 
 // Candidate named routes — MUST be before candidateInviteRoutes (which has /:id catch-all)
 app.get(

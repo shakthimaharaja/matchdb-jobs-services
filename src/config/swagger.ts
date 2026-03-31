@@ -417,11 +417,24 @@ const options: swaggerJsdoc.Options = {
             fullName: { type: "string" },
             phone: { type: "string" },
             designation: { type: "string" },
-            role: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
-            department: { type: "string", enum: ["accounts", "immigration", "placement"], nullable: true },
+            role: {
+              type: "string",
+              enum: ["admin", "manager", "vendor", "marketer"],
+            },
+            department: {
+              type: "string",
+              enum: ["accounts", "immigration", "placement"],
+              nullable: true,
+            },
             permissions: { type: "array", items: { type: "string" } },
-            status: { type: "string", enum: ["active", "invited", "deactivated"] },
-            onlineStatus: { type: "string", enum: ["online", "away", "offline"] },
+            status: {
+              type: "string",
+              enum: ["active", "invited", "deactivated"],
+            },
+            onlineStatus: {
+              type: "string",
+              enum: ["online", "away", "offline"],
+            },
             joinedAt: { type: "string", format: "date-time" },
           },
         },
@@ -433,10 +446,16 @@ const options: swaggerJsdoc.Options = {
             invitedByAdminId: { type: "string" },
             inviteeEmail: { type: "string" },
             inviteeName: { type: "string" },
-            assignedRole: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
+            assignedRole: {
+              type: "string",
+              enum: ["admin", "manager", "vendor", "marketer"],
+            },
             assignedDepartment: { type: "string", nullable: true },
             token: { type: "string" },
-            status: { type: "string", enum: ["pending", "accepted", "expired", "revoked"] },
+            status: {
+              type: "string",
+              enum: ["pending", "accepted", "expired", "revoked"],
+            },
             expiresAt: { type: "string", format: "date-time" },
             usedAt: { type: "string", format: "date-time", nullable: true },
           },
@@ -2076,7 +2095,10 @@ const options: swaggerJsdoc.Options = {
                     companyWebsite: { type: "string" },
                     industry: { type: "string" },
                     companySize: { type: "string" },
-                    subscriptionPlanSlug: { type: "string", default: "starter" },
+                    subscriptionPlanSlug: {
+                      type: "string",
+                      default: "starter",
+                    },
                   },
                 },
               },
@@ -2097,7 +2119,8 @@ const options: swaggerJsdoc.Options = {
           security: [{ BearerAuth: [] }],
           responses: {
             200: {
-              description: "Company context with companyAdmin, companyUser, role, permissions",
+              description:
+                "Company context with companyAdmin, companyUser, role, permissions",
             },
             401: { description: "Unauthorized" },
           },
@@ -2118,8 +2141,14 @@ const options: swaggerJsdoc.Options = {
                   properties: {
                     email: { type: "string", format: "email" },
                     name: { type: "string" },
-                    role: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
-                    department: { type: "string", enum: ["accounts", "immigration", "placement"] },
+                    role: {
+                      type: "string",
+                      enum: ["admin", "manager", "vendor", "marketer"],
+                    },
+                    department: {
+                      type: "string",
+                      enum: ["accounts", "immigration", "placement"],
+                    },
                   },
                 },
               },
@@ -2262,8 +2291,14 @@ const options: swaggerJsdoc.Options = {
                   type: "object",
                   required: ["role"],
                   properties: {
-                    role: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
-                    department: { type: "string", enum: ["accounts", "immigration", "placement"] },
+                    role: {
+                      type: "string",
+                      enum: ["admin", "manager", "vendor", "marketer"],
+                    },
+                    department: {
+                      type: "string",
+                      enum: ["accounts", "immigration", "placement"],
+                    },
                   },
                 },
               },

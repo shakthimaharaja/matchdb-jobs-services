@@ -14,3 +14,18 @@ export { ClientCompany } from "./ClientCompany";
 export { VendorCompany } from "./VendorCompany";
 export { SubscriptionPlan } from "./SubscriptionPlan";
 export { Counter, getNextId } from "./Counter";
+// ADP (People) models
+export { PayPeriod } from "./PayPeriod";
+export { PayrollRecord } from "./PayrollRecord";
+export { PayStub } from "./PayStub";
+// QuickBooks (Money) models
+export { Invoice } from "./Invoice";
+export { InvoicePayment } from "./InvoicePayment";
+export { VendorBill } from "./VendorBill";
+export { VendorBillPayment } from "./VendorBillPayment";
+export { ClientRateCard } from "./ClientRateCard";
+export { ExpenseCategory } from "./ExpenseCategory";
+// Fieldglass (Timesheets) models
+export { TimeEntry } from "./TimeEntry";
+export { LeaveBalance } from "./LeaveBalance";
+export { TimesheetAuditLog } from "./TimesheetAuditLog";
