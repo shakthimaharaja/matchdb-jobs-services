@@ -3,7 +3,7 @@ import mongoose, { Schema } from "mongoose";
 export interface IVendorCompany {
   _id: string;
   name: string;
-  marketerId: string;
+  employerId: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,12 +15,12 @@ const VendorCompanySchema = new Schema<IVendorCompany>(
       default: () => new mongoose.Types.ObjectId().toString(),
     },
     name: { type: String, required: true },
-    marketerId: { type: String, required: true },
+    employerId: { type: String, required: true },
   },
   { timestamps: true },
 );
 
-VendorCompanySchema.index({ marketerId: 1, name: 1 }, { unique: true });
+VendorCompanySchema.index({ employerId: 1, name: 1 }, { unique: true });
 
 export const VendorCompany = mongoose.model<IVendorCompany>(
   "VendorCompany",

@@ -6,9 +6,9 @@ import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import jobsRoutes from "./routes/jobs.routes";
-import marketerRoutes from "./routes/marketer.routes";
+import employerRoutes from "./routes/employer.routes";
 import financialsRoutes from "./routes/financials.routes";
-import vendorFinancialsRoutes from "./routes/vendorFinancials.routes";
+import employerFinancialsRoutes from "./routes/employerFinancials.routes";
 import timesheetsRoutes from "./routes/timesheets.routes";
 import interviewsRoutes from "./routes/interviews.routes";
 import internalRoutes from "./routes/internal.routes";
@@ -20,10 +20,11 @@ import { requireAuth, requireCandidate } from "./middleware/auth.middleware";
 import {
   listCompanies,
   getCandidateForwardedOpenings,
+  getCandidateMyDetail,
   verifyInvite,
   acceptInvite,
   searchCompanies,
-} from "./controllers/marketer.controller";
+} from "./controllers/employer.controller";
 import { addSSEClient } from "./services/sse.service";
 import { getCounts } from "./services/poll-counts.service";
 import { getPublicData } from "./services/poll-public-data.service";
@@ -65,19 +66,27 @@ app.get("/api/jobs/invite/:token", verifyInvite);
 // Accept invite (requires auth — candidate must be logged in)
 app.post("/api/jobs/invite/:token/accept", requireAuth, acceptInvite);
 
-// Candidate: forwarded openings from their marketing company
+// Candidate: forwarded openings from their employer company
 app.get(
   "/api/jobs/candidate/forwarded",
   requireCandidate,
   getCandidateForwardedOpenings,
 );
 
-app.use("/api/jobs/marketer", marketerRoutes); // must be BEFORE /api/jobs to avoid :id collision
+app.use("/api/jobs/marketer", employerRoutes); // must be BEFORE /api/jobs to avoid :id collision
 app.use("/api/jobs/marketer/financials", financialsRoutes);
-app.use("/api/jobs/vendor/financials", vendorFinancialsRoutes);
+app.use("/api/jobs/vendor/financials", employerFinancialsRoutes);
 app.use("/api/jobs/timesheets", timesheetsRoutes);
 app.use("/api/jobs/interviews", interviewsRoutes);
 app.use("/api/jobs/admin", adminRoutes);
+
+// Candidate named routes — MUST be before candidateInviteRoutes (which has /:id catch-all)
+app.get(
+  "/api/jobs/candidate/my-detail",
+  requireCandidate,
+  getCandidateMyDetail,
+);
+
 app.use("/api/jobs/candidate", candidateInviteRoutes);
 
 // Polling endpoints (replaced WebSocket) — must be BEFORE jobsRoutes to avoid :id collision

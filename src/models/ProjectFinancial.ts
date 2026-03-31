@@ -3,7 +3,7 @@ import mongoose, { Schema } from "mongoose";
 export interface IProjectFinancial {
   _id: string;
   applicationId: string;
-  marketerId: string;
+  employerId: string;
   candidateId: string;
   candidateName: string;
   jobTitle: string;
@@ -43,7 +43,7 @@ const ProjectFinancialSchema = new Schema<IProjectFinancial>(
       default: () => new mongoose.Types.ObjectId().toString(),
     },
     applicationId: { type: String, required: true },
-    marketerId: { type: String, required: true },
+    employerId: { type: String, required: true },
     candidateId: { type: String, default: "" },
     candidateName: { type: String, default: "" },
     jobTitle: { type: String, default: "" },
@@ -77,10 +77,10 @@ const ProjectFinancialSchema = new Schema<IProjectFinancial>(
 );
 
 ProjectFinancialSchema.index(
-  { applicationId: 1, marketerId: 1 },
+  { applicationId: 1, employerId: 1 },
   { unique: true },
 );
-ProjectFinancialSchema.index({ marketerId: 1, candidateId: 1 });
+ProjectFinancialSchema.index({ employerId: 1, candidateId: 1 });
 
 export const ProjectFinancial = mongoose.model<IProjectFinancial>(
   "ProjectFinancial",

@@ -5,8 +5,8 @@ export interface ICompanyInvite {
   _id: string;
   companyId: string;
   companyName: string;
-  marketerId: string;
-  marketerEmail: string;
+  employerId: string;
+  employerEmail: string;
   candidateEmail: string;
   candidateName: string;
   offerNote: string;
@@ -25,8 +25,8 @@ const CompanyInviteSchema = new Schema<ICompanyInvite>(
     },
     companyId: { type: String, required: true },
     companyName: { type: String, default: "" },
-    marketerId: { type: String, required: true },
-    marketerEmail: { type: String, default: "" },
+    employerId: { type: String, required: true },
+    employerEmail: { type: String, default: "" },
     candidateEmail: { type: String, required: true },
     candidateName: { type: String, default: "" },
     offerNote: { type: String, default: "" },

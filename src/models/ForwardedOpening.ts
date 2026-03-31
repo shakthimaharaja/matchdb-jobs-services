@@ -2,8 +2,8 @@ import mongoose, { Schema } from "mongoose";
 
 export interface IForwardedOpening {
   _id: string;
-  marketerId: string;
-  marketerEmail: string;
+  employerId: string;
+  employerEmail: string;
   companyId: string;
   companyName: string;
   candidateEmail: string;
@@ -30,8 +30,8 @@ const ForwardedOpeningSchema = new Schema<IForwardedOpening>(
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
     },
-    marketerId: { type: String, required: true },
-    marketerEmail: { type: String, default: "" },
+    employerId: { type: String, required: true },
+    employerEmail: { type: String, default: "" },
     companyId: { type: String, required: true },
     companyName: { type: String, default: "" },
     candidateEmail: { type: String, required: true },
@@ -53,7 +53,7 @@ const ForwardedOpeningSchema = new Schema<IForwardedOpening>(
 );
 
 ForwardedOpeningSchema.index(
-  { marketerId: 1, candidateEmail: 1, jobId: 1 },
+  { employerId: 1, candidateEmail: 1, jobId: 1 },
   { unique: true },
 );
 ForwardedOpeningSchema.index({ candidateEmail: 1, createdAt: -1 });

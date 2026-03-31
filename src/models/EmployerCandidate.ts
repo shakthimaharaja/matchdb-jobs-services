@@ -1,9 +1,9 @@
 import mongoose, { Schema } from "mongoose";
 
-export interface IMarketerCandidate {
+export interface IEmployerCandidate {
   _id: string;
   companyId: string;
-  marketerId: string;
+  employerId: string;
   candidateId: string;
   candidateName: string;
   candidateEmail: string;
@@ -14,14 +14,14 @@ export interface IMarketerCandidate {
   updatedAt: Date;
 }
 
-const MarketerCandidateSchema = new Schema<IMarketerCandidate>(
+const EmployerCandidateSchema = new Schema<IEmployerCandidate>(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
     },
     companyId: { type: String, required: true },
-    marketerId: { type: String, required: true },
+    employerId: { type: String, required: true },
     candidateId: { type: String, default: "" },
     candidateName: { type: String, default: "" },
     candidateEmail: { type: String, required: true },
@@ -32,13 +32,14 @@ const MarketerCandidateSchema = new Schema<IMarketerCandidate>(
   { timestamps: true },
 );
 
-MarketerCandidateSchema.index(
+EmployerCandidateSchema.index(
   { companyId: 1, candidateEmail: 1 },
   { unique: true },
 );
-MarketerCandidateSchema.index({ marketerId: 1 });
+EmployerCandidateSchema.index({ employerId: 1 });
 
-export const MarketerCandidate = mongoose.model<IMarketerCandidate>(
+export const EmployerCandidate = mongoose.model<IEmployerCandidate>(
   "MarketerCandidate",
-  MarketerCandidateSchema,
+  EmployerCandidateSchema,
+  "marketercandidates",
 );

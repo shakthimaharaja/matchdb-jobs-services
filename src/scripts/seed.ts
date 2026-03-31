@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import { randomUUID } from "node:crypto";
 import { connectMongo, disconnectMongo } from "../config/mongoose";
 import {
@@ -8,16 +8,24 @@ import {
   PokeRecord,
   PokeLog,
   Company,
-  MarketerCandidate,
+  EmployerCandidate,
   ForwardedOpening,
   CompanyInvite,
   ProjectFinancial,
   Timesheet,
   InterviewInvite,
 } from "../models";
+import { CompanyAdmin } from "../models/CompanyAdmin";
+import { CompanyUser } from "../models/CompanyUser";
+import { EmployeeInvitation } from "../models/EmployeeInvitation";
+import { SubscriptionPlan, DEFAULT_PLANS } from "../models/SubscriptionPlan";
+import { CandidateInvitation } from "../models/CandidateInvitation";
+import { CandidateUser } from "../models/CandidateUser";
+import { CandidatePlan } from "../models/CandidatePlan";
+import { Counter } from "../models/Counter";
 
 /* ================================================================== */
-/*  Shared IDs — MUST match matchdb-shell-services seed exactly        */
+/*  Shared IDs â€” MUST match matchdb-shell-services seed exactly        */
 /* ================================================================== */
 const ADMIN_VENDOR = "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa";
 const ADMIN_MARKETER = "aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa";
@@ -37,6 +45,52 @@ const C10 = "cccccccc-0010-0010-0010-cccccccccccc";
 const V2 = "vvvvvvvv-0002-0002-0002-vvvvvvvvvvvv";
 const V3 = "vvvvvvvv-0003-0003-0003-vvvvvvvvvvvv";
 
+// Employer (combined vendor + marketer)
+const ADMIN_EMPLOYER = "eeeeeeee-0001-0001-0001-eeeeeeeeeeee";
+
+// â”€â”€ 4 new employer admins (one per shell subscription tier) â”€â”€
+const ADMIN_DELTA = "dddddddd-0001-0001-0001-dddddddddddd"; // free
+const ADMIN_EPSILON = "dddddddd-0002-0002-0002-dddddddddddd"; // basic
+const ADMIN_ZETA = "dddddddd-0003-0003-0003-dddddddddddd"; // pro
+const ADMIN_ETA = "dddddddd-0004-0004-0004-dddddddddddd"; // pro_plus
+
+// Delta Solutions employees
+const DE1 = "deeee001-0001-0001-0001-deeee0010001";
+const DE2 = "deeee002-0002-0002-0002-deeee0020002";
+const DE3 = "deeee003-0003-0003-0003-deeee0030003";
+const DE4 = "deeee004-0004-0004-0004-deeee0040004";
+const DE5 = "deeee005-0005-0005-0005-deeee0050005";
+// Epsilon Tech employees
+const EE1 = "epeee001-0001-0001-0001-epeee0010001";
+const EE2 = "epeee002-0002-0002-0002-epeee0020002";
+const EE3 = "epeee003-0003-0003-0003-epeee0030003";
+const EE4 = "epeee004-0004-0004-0004-epeee0040004";
+const EE5 = "epeee005-0005-0005-0005-epeee0050005";
+// Zeta Corp employees
+const ZE1 = "zteee001-0001-0001-0001-zteee0010001";
+const ZE2 = "zteee002-0002-0002-0002-zteee0020002";
+const ZE3 = "zteee003-0003-0003-0003-zteee0030003";
+const ZE4 = "zteee004-0004-0004-0004-zteee0040004";
+const ZE5 = "zteee005-0005-0005-0005-zteee0050005";
+// Eta Industries employees
+const HE1 = "hteee001-0001-0001-0001-hteee0010001";
+const HE2 = "hteee002-0002-0002-0002-hteee0020002";
+const HE3 = "hteee003-0003-0003-0003-hteee0030003";
+const HE4 = "hteee004-0004-0004-0004-hteee0040004";
+const HE5 = "hteee005-0005-0005-0005-hteee0050005";
+
+// Employer candidates (10)
+const EC1 = "eccccccc-0001-0001-0001-eccccccccccc";
+const EC2 = "eccccccc-0002-0002-0002-eccccccccccc";
+const EC3 = "eccccccc-0003-0003-0003-eccccccccccc";
+const EC4 = "eccccccc-0004-0004-0004-eccccccccccc";
+const EC5 = "eccccccc-0005-0005-0005-eccccccccccc";
+const EC6 = "eccccccc-0006-0006-0006-eccccccccccc";
+const EC7 = "eccccccc-0007-0007-0007-eccccccccccc";
+const EC8 = "eccccccc-0008-0008-0008-eccccccccccc";
+const EC9 = "eccccccc-0009-0009-0009-eccccccccccc";
+const EC10 = "eccccccc-0010-0010-0010-eccccccccccc";
+
 const oid = () => new mongoose.Types.ObjectId().toString();
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
 const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000);
@@ -44,7 +98,7 @@ const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000);
 /* ================================================================== */
 async function seed() {
   await connectMongo();
-  console.log("🌱 Seeding matchdb-jobs database...\n");
+  console.log("ðŸŒ± Seeding matchdb-jobs database...\n");
 
   const db = mongoose.connection.db!;
   const existing = new Set(
@@ -57,12 +111,20 @@ async function seed() {
     "pokerecords",
     "pokelogs",
     "companies",
-    "marketercandidates",
+    "EmployerCandidates",
     "forwardedopenings",
     "companyinvites",
     "projectfinancials",
     "timesheets",
     "interviewinvites",
+    "companyadmins",
+    "companyusers",
+    "employeeinvitations",
+    "subscriptionplans",
+    "candidateinvitations",
+    "candidateusers",
+    "candidateplans",
+    "counters",
   ]) {
     if (existing.has(name)) await db.dropCollection(name);
   }
@@ -73,22 +135,30 @@ async function seed() {
     PokeRecord.createCollection(),
     PokeLog.createCollection(),
     Company.createCollection(),
-    MarketerCandidate.createCollection(),
+    EmployerCandidate.createCollection(),
     ForwardedOpening.createCollection(),
     CompanyInvite.createCollection(),
     ProjectFinancial.createCollection(),
     Timesheet.createCollection(),
     InterviewInvite.createCollection(),
+    CompanyAdmin.createCollection(),
+    CompanyUser.createCollection(),
+    EmployeeInvitation.createCollection(),
+    SubscriptionPlan.createCollection(),
+    CandidateInvitation.createCollection(),
+    CandidateUser.createCollection(),
+    CandidatePlan.createCollection(),
+    Counter.createCollection(),
   ]);
-  console.log("  ✓ Dropped and recreated all collections");
+  console.log("  âœ“ Dropped and recreated all collections");
 
   /* ================================================================ */
-  /*  JOBS — 20 openings across 3 vendors                             */
+  /*  JOBS â€” 20 openings across 3 vendors                             */
   /* ================================================================ */
-  const J = Array.from({ length: 20 }, () => oid());
+  const J = Array.from({ length: 35 }, () => oid());
 
   const jobData = [
-    // ── Admin Vendor jobs (8) ──
+    // â”€â”€ Admin Vendor jobs (8) â”€â”€
     {
       _id: J[0],
       vendorId: ADMIN_VENDOR,
@@ -282,7 +352,7 @@ async function seed() {
       sourceUserId: ADMIN_VENDOR,
     },
 
-    // ── Frank Miller (V2) jobs (7) ──
+    // â”€â”€ Frank Miller (V2) jobs (7) â”€â”€
     {
       _id: J[8],
       vendorId: V2,
@@ -459,7 +529,7 @@ async function seed() {
       sourceUserId: V2,
     },
 
-    // ── Sarah Lee (V3) jobs (5) ──
+    // â”€â”€ Sarah Lee (V3) jobs (5) â”€â”€
     {
       _id: J[15],
       vendorId: V3,
@@ -586,20 +656,394 @@ async function seed() {
       isActive: true,
       sourceUserId: V3,
     },
+
+    // â”€â”€ Employer (admin@employer.com) jobs (12) â”€â”€
+    {
+      _id: J[20],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Principal Software Architect",
+      description:
+        "Lead architecture for a multi-tenant SaaS platform. Microservices, event-driven, cloud-native.",
+      location: "San Francisco, CA",
+      jobCountry: "US",
+      jobState: "CA",
+      jobCity: "San Francisco",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "hybrid",
+      salaryMin: 200000,
+      salaryMax: 260000,
+      skillsRequired: [
+        "System Design",
+        "Microservices",
+        "AWS",
+        "Kafka",
+        "TypeScript",
+      ],
+      experienceRequired: 10,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[21],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Senior Rust Developer",
+      description:
+        "High-performance systems in Rust for real-time trading infrastructure.",
+      location: "New York, NY",
+      jobCountry: "US",
+      jobState: "NY",
+      jobCity: "New York",
+      jobType: "c2c",
+      jobSubType: "contract",
+      workMode: "remote",
+      payPerHour: 120,
+      skillsRequired: [
+        "Rust",
+        "Systems Programming",
+        "Concurrency",
+        "Linux",
+        "Networking",
+      ],
+      experienceRequired: 5,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[22],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "AI/ML Platform Engineer",
+      description:
+        "Building MLOps infrastructure: model training pipelines, feature stores, and inference serving.",
+      location: "Seattle, WA",
+      jobCountry: "US",
+      jobState: "WA",
+      jobCity: "Seattle",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "hybrid",
+      salaryMin: 180000,
+      salaryMax: 230000,
+      skillsRequired: [
+        "Python",
+        "Kubernetes",
+        "MLflow",
+        "TensorFlow",
+        "Apache Spark",
+      ],
+      experienceRequired: 6,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[23],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "React/Next.js Lead Developer",
+      description:
+        "Lead frontend team building a customer-facing dashboard with Next.js App Router, RSC, and Tailwind.",
+      location: "Austin, TX",
+      jobCountry: "US",
+      jobState: "TX",
+      jobCity: "Austin",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "remote",
+      salaryMin: 160000,
+      salaryMax: 200000,
+      skillsRequired: [
+        "React",
+        "Next.js",
+        "TypeScript",
+        "Tailwind CSS",
+        "GraphQL",
+      ],
+      experienceRequired: 7,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[24],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Kubernetes Platform Engineer",
+      description:
+        "Build and operate production K8s clusters. GitOps, Helm, ArgoCD, and service mesh.",
+      location: "Denver, CO",
+      jobCountry: "US",
+      jobState: "CO",
+      jobCity: "Denver",
+      jobType: "1099",
+      jobSubType: "hourly",
+      workMode: "remote",
+      payPerHour: 100,
+      skillsRequired: ["Kubernetes", "ArgoCD", "Helm", "Terraform", "Istio"],
+      experienceRequired: 5,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[25],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Staff Data Scientist",
+      description:
+        "Experimentation framework, causal inference, and predictive modeling for a B2C marketplace.",
+      location: "Chicago, IL",
+      jobCountry: "US",
+      jobState: "IL",
+      jobCity: "Chicago",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "hybrid",
+      salaryMin: 170000,
+      salaryMax: 210000,
+      skillsRequired: [
+        "Python",
+        "SQL",
+        "Statistics",
+        "Experimentation",
+        "Spark",
+      ],
+      experienceRequired: 7,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[26],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "iOS/Swift Senior Developer",
+      description:
+        "Consumer iOS app with SwiftUI, Combine, and Core Data. MVVM architecture.",
+      location: "Boston, MA",
+      jobCountry: "US",
+      jobState: "MA",
+      jobCity: "Boston",
+      jobType: "1099",
+      jobSubType: "hourly",
+      workMode: "remote",
+      payPerHour: 85,
+      skillsRequired: ["Swift", "SwiftUI", "Combine", "Core Data", "REST APIs"],
+      experienceRequired: 4,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[27],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Security Operations Engineer",
+      description:
+        "SOC operations, threat detection, and incident response. SIEM and EDR tools.",
+      location: "Washington, DC",
+      jobCountry: "US",
+      jobState: "DC",
+      jobCity: "Washington",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "onsite",
+      salaryMin: 140000,
+      salaryMax: 180000,
+      skillsRequired: ["SIEM", "EDR", "Incident Response", "Python", "SOAR"],
+      experienceRequired: 5,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[28],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Full Stack TypeScript Engineer",
+      description:
+        "End-to-end TypeScript: React frontend + Node.js/Express backend. PostgreSQL and Redis.",
+      location: "Remote",
+      jobCountry: "US",
+      jobState: "",
+      jobCity: "",
+      jobType: "c2c",
+      jobSubType: "contract",
+      workMode: "remote",
+      payPerHour: 90,
+      skillsRequired: ["TypeScript", "React", "Node.js", "PostgreSQL", "Redis"],
+      experienceRequired: 4,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[29],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Android Kotlin Developer",
+      description:
+        "Native Android with Kotlin, Jetpack Compose, and Hilt DI. Play Store deployment.",
+      location: "Atlanta, GA",
+      jobCountry: "US",
+      jobState: "GA",
+      jobCity: "Atlanta",
+      jobType: "1099",
+      jobSubType: "hourly",
+      workMode: "hybrid",
+      payPerHour: 75,
+      skillsRequired: [
+        "Kotlin",
+        "Jetpack Compose",
+        "Android",
+        "Hilt",
+        "Coroutines",
+      ],
+      experienceRequired: 3,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[30],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Technical Program Manager",
+      description:
+        "Drive cross-functional programs across 5 engineering teams. Agile at scale.",
+      location: "New York, NY",
+      jobCountry: "US",
+      jobState: "NY",
+      jobCity: "New York",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "hybrid",
+      salaryMin: 160000,
+      salaryMax: 195000,
+      skillsRequired: [
+        "Program Management",
+        "Agile",
+        "JIRA",
+        "Stakeholder Management",
+        "Technical Writing",
+      ],
+      experienceRequired: 8,
+      isActive: true,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+    {
+      _id: J[31],
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      recruiterName: "Admin Employer",
+      recruiterPhone: "555-400-0001",
+      title: "Database Reliability Engineer",
+      description:
+        "Manage PostgreSQL and MongoDB clusters at scale. Replication, sharding, and performance tuning.",
+      location: "Portland, OR",
+      jobCountry: "US",
+      jobState: "OR",
+      jobCity: "Portland",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "remote",
+      salaryMin: 150000,
+      salaryMax: 190000,
+      skillsRequired: [
+        "PostgreSQL",
+        "MongoDB",
+        "Database Administration",
+        "Linux",
+        "Python",
+      ],
+      experienceRequired: 6,
+      isActive: false,
+      sourceUserId: ADMIN_EMPLOYER,
+    },
+
+    // ── Delta Solutions jobs (2) ──
+    {
+      _id: J[32],
+      vendorId: ADMIN_DELTA,
+      vendorEmail: "admin@delta.com",
+      recruiterName: "Admin Delta",
+      recruiterPhone: "555-400-0001",
+      title: "Lead React Native Developer",
+      description:
+        "Build cross-platform mobile apps using React Native + TypeScript for enterprise clients.",
+      location: "Austin, TX",
+      jobCountry: "US",
+      jobState: "TX",
+      jobCity: "Austin",
+      jobType: "w2",
+      jobSubType: "salary",
+      workMode: "hybrid",
+      salaryMin: 150000,
+      salaryMax: 185000,
+      skillsRequired: ["React Native", "TypeScript", "Redux", "iOS", "Android"],
+      experienceRequired: 5,
+      isActive: true,
+      sourceUserId: ADMIN_DELTA,
+    },
+    {
+      _id: J[33],
+      vendorId: ADMIN_DELTA,
+      vendorEmail: "admin@delta.com",
+      recruiterName: "Admin Delta",
+      recruiterPhone: "555-400-0001",
+      title: "Senior Cloud Infrastructure Engineer",
+      description:
+        "Design and manage AWS/GCP infrastructure, CI/CD pipelines, and Kubernetes clusters.",
+      location: "Remote",
+      jobCountry: "US",
+      jobState: "TX",
+      jobCity: "Remote",
+      jobType: "c2c",
+      jobSubType: "hourly",
+      workMode: "remote",
+      payPerHour: 95,
+      skillsRequired: ["AWS", "GCP", "Kubernetes", "Terraform", "CI/CD"],
+      experienceRequired: 6,
+      isActive: true,
+      sourceUserId: ADMIN_DELTA,
+    },
   ];
 
   const jobs = await Job.insertMany(jobData);
-  console.log(`  ✓ Created ${jobs.length} jobs`);
+  console.log(`  âœ“ Created ${jobs.length} jobs`);
 
   /* ================================================================ */
-  /*  CANDIDATE PROFILES — 10                                          */
+  /*  CANDIDATE PROFILES â€” 10                                          */
   /* ================================================================ */
   const COMPANY_ID = oid();
   const COMPANY2_ID = oid();
+  const EMPLOYER_COMPANY_ID = oid();
+  const DELTA_COMPANY_ID = oid();
+  const EPSILON_COMPANY_ID = oid();
+  const ZETA_COMPANY_ID = oid();
+  const ETA_COMPANY_ID = oid();
 
   const profiles = await CandidateProfile.insertMany([
     {
       _id: oid(),
+      displayId: "CND-0001",
       candidateId: C1,
       username: "alice-johnson-c00001",
       name: "Alice Johnson",
@@ -617,16 +1061,17 @@ async function seed() {
       resumeSummary:
         "Frontend specialist in React/TypeScript delivering high-quality UIs at scale.",
       resumeExperience:
-        "TechCorp (2021–present): Senior Frontend Engineer — micro-frontends for 200k+ users.\nStartupXYZ (2018–2021): Frontend Developer — customer portal redesign.",
+        "TechCorp (2021â€“present): Senior Frontend Engineer â€” micro-frontends for 200k+ users.\nStartupXYZ (2018â€“2021): Frontend Developer â€” customer portal redesign.",
       resumeEducation: "B.S. Computer Science, NYU, 2018",
       resumeAchievements:
-        "Led jQuery→React migration, 60% load-time reduction.",
+        "Led jQueryâ†’React migration, 60% load-time reduction.",
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
       profileLocked: false,
     },
     {
       _id: oid(),
+      displayId: "CND-0002",
       candidateId: C2,
       username: "dave-brown-c00002",
       name: "Dave Brown",
@@ -644,7 +1089,7 @@ async function seed() {
       resumeSummary:
         "4 years building scalable ETL pipelines and data warehouses.",
       resumeExperience:
-        "DataWorks (2022–present): Spark pipelines processing 5 TB daily.\nAnalyticsCo (2020–2022): Airflow DAGs for automated reporting.",
+        "DataWorks (2022â€“present): Spark pipelines processing 5 TB daily.\nAnalyticsCo (2020â€“2022): Airflow DAGs for automated reporting.",
       resumeEducation: "M.S. Data Science, University of Chicago, 2020",
       resumeAchievements:
         "Reduced pipeline runtime by 40% via query optimization.",
@@ -654,6 +1099,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0003",
       candidateId: C3,
       username: "emma-davis-c00003",
       name: "Emma Davis",
@@ -679,7 +1125,7 @@ async function seed() {
       resumeSummary:
         "7 years of cloud infrastructure, container orchestration, and automation.",
       resumeExperience:
-        "CloudFirst (2020–present): Senior DevOps — K8s clusters across 3 AWS regions.\nInfraTeam (2017–2020): CI/CD with Jenkins and GitLab CI.",
+        "CloudFirst (2020â€“present): Senior DevOps â€” K8s clusters across 3 AWS regions.\nInfraTeam (2017â€“2020): CI/CD with Jenkins and GitLab CI.",
       resumeEducation: "B.S. Computer Engineering, UT Austin, 2017",
       resumeAchievements: "99.99% uptime SLA for 2 consecutive years.",
       companyId: COMPANY_ID,
@@ -688,6 +1134,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0004",
       candidateId: C4,
       username: "rahul-sharma-c00004",
       name: "Rahul Sharma",
@@ -713,7 +1160,7 @@ async function seed() {
       resumeSummary:
         "5 years building MERN-stack applications with cloud deployments.",
       resumeExperience:
-        "InnoSoft (2021–present): Full Stack Dev — built microservices architecture.\nWebDev Co (2019–2021): React/Node developer.",
+        "InnoSoft (2021â€“present): Full Stack Dev â€” built microservices architecture.\nWebDev Co (2019â€“2021): React/Node developer.",
       resumeEducation: "B.Tech Computer Science, IIT Bombay, 2019",
       resumeAchievements:
         "Designed caching layer reducing API response time by 70%.",
@@ -723,6 +1170,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0005",
       candidateId: C5,
       username: "priya-patel-c00005",
       name: "Priya Patel",
@@ -748,7 +1196,7 @@ async function seed() {
       resumeSummary:
         "6 years leading test automation for enterprise web and mobile apps.",
       resumeExperience:
-        "HealthTech (2021–present): QA Lead — Playwright framework for 3 product lines.\nTestPro (2018–2021): Automation Engineer — Selenium + API testing.",
+        "HealthTech (2021â€“present): QA Lead â€” Playwright framework for 3 product lines.\nTestPro (2018â€“2021): Automation Engineer â€” Selenium + API testing.",
       resumeEducation:
         "M.S. Software Engineering, University of Washington, 2018",
       resumeAchievements:
@@ -759,6 +1207,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0006",
       candidateId: C6,
       username: "james-wilson-c00006",
       name: "James Wilson",
@@ -783,7 +1232,7 @@ async function seed() {
       bio: "ML engineer specializing in recommendation systems and NLP.",
       resumeSummary: "5 years building and deploying ML models at scale.",
       resumeExperience:
-        "FinanceAI (2022–present): ML Engineer — built fraud-detection model (98.7% recall).\nDataLab (2020–2022): Data Scientist — NLP pipeline for document classification.",
+        "FinanceAI (2022â€“present): ML Engineer â€” built fraud-detection model (98.7% recall).\nDataLab (2020â€“2022): Data Scientist â€” NLP pipeline for document classification.",
       resumeEducation: "M.S. Machine Learning, Stanford University, 2020",
       resumeAchievements:
         "Patent pending on novel fraud-detection ensemble method.",
@@ -793,6 +1242,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0007",
       candidateId: C7,
       username: "sophia-martinez-c00007",
       name: "Sophia Martinez",
@@ -817,7 +1267,7 @@ async function seed() {
       resumeSummary:
         "6 years in cybersecurity covering SOC, pen testing, and cloud security.",
       resumeExperience:
-        "SecureNet (2020–present): Security Engineer — managed SIEM for 500-node network.\nCyberShield (2018–2020): SOC Analyst — incident response and threat hunting.",
+        "SecureNet (2020â€“present): Security Engineer â€” managed SIEM for 500-node network.\nCyberShield (2018â€“2020): SOC Analyst â€” incident response and threat hunting.",
       resumeEducation: "B.S. Cybersecurity, Georgetown University, 2018",
       resumeAchievements:
         "CISSP and CEH certified. Led response to zero-day incident with zero data loss.",
@@ -827,6 +1277,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0008",
       candidateId: C8,
       username: "liam-chen-c00008",
       name: "Liam Chen",
@@ -852,7 +1303,7 @@ async function seed() {
       resumeSummary:
         "8 years building low-latency backend services processing millions of events.",
       resumeExperience:
-        "GoSystems (2020–present): Senior BE — Go microservices handling 50k RPS.\nScaleCo (2017–2020): Backend Dev — Kafka-based event streaming platform.",
+        "GoSystems (2020â€“present): Senior BE â€” Go microservices handling 50k RPS.\nScaleCo (2017â€“2020): Backend Dev â€” Kafka-based event streaming platform.",
       resumeEducation: "M.S. Computer Science, UC Berkeley, 2017",
       resumeAchievements:
         "Designed event pipeline reducing p99 latency from 200ms to 12ms.",
@@ -862,6 +1313,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0009",
       candidateId: C9,
       username: "nina-gupta-c00009",
       name: "Nina Gupta",
@@ -887,7 +1339,7 @@ async function seed() {
       resumeSummary:
         "4 years designing B2B SaaS products from research to handoff.",
       resumeExperience:
-        "DesignHub (2022–present): Product Designer — design system serving 12 product teams.\nPixelCraft (2020–2022): UI/UX Designer — e-commerce redesign boosting conversion 25%.",
+        "DesignHub (2022â€“present): Product Designer â€” design system serving 12 product teams.\nPixelCraft (2020â€“2022): UI/UX Designer â€” e-commerce redesign boosting conversion 25%.",
       resumeEducation: "BFA Interaction Design, RISD, 2020",
       resumeAchievements:
         "Design system adopted by 12 teams, 40% faster feature delivery.",
@@ -897,6 +1349,7 @@ async function seed() {
     },
     {
       _id: oid(),
+      displayId: "CND-0010",
       candidateId: C10,
       username: "omar-hassan-c00010",
       name: "Omar Hassan",
@@ -922,7 +1375,7 @@ async function seed() {
       resumeSummary:
         "6 years running production Kubernetes at scale with 99.99% availability.",
       resumeExperience:
-        "SRE Corp (2021–present): Senior SRE — Prometheus/Grafana for 200+ services.\nInfraOps (2018–2021): SRE — built Terraform modules for multi-account AWS.",
+        "SRE Corp (2021â€“present): Senior SRE â€” Prometheus/Grafana for 200+ services.\nInfraOps (2018â€“2021): SRE â€” built Terraform modules for multi-account AWS.",
       resumeEducation: "B.S. Computer Science, UT Dallas, 2018",
       resumeAchievements:
         "Reduced MTTR from 45 min to 8 min via automated runbooks.",
@@ -930,23 +1383,377 @@ async function seed() {
       companyName: "",
       profileLocked: false,
     },
+
+    // â”€â”€ Employer Candidates (10) â€” Gamma Workforce â”€â”€
+    {
+      _id: oid(),
+      displayId: "CND-0011",
+      candidateId: EC1,
+      username: "carlos-reyes-ec00001",
+      name: "Carlos Reyes",
+      email: "carlos.reyes@test.com",
+      phone: "555-401-0001",
+      currentCompany: "Apex Digital",
+      currentRole: "Principal Engineer",
+      preferredJobType: "w2",
+      expectedHourlyRate: 110,
+      experienceYears: 10,
+      skills: [
+        "System Design",
+        "Microservices",
+        "AWS",
+        "Kafka",
+        "TypeScript",
+        "Go",
+        "Kubernetes",
+      ],
+      location: "San Francisco, CA",
+      profileCountry: "US",
+      bio: "Principal engineer with 10+ years building distributed systems at scale.",
+      resumeSummary:
+        "Architect and hands-on IC leading platform teams across fintech and e-commerce.",
+      resumeExperience:
+        "Apex Digital (2021â€“present): Principal Engineer â€” multi-tenant SaaS architecture.\nScaleWorks (2017â€“2021): Staff Engineer â€” event-driven microservices.",
+      resumeEducation: "M.S. Computer Science, Stanford University, 2016",
+      resumeAchievements:
+        "Led migration from monolith to microservices serving 2M+ DAU.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0012",
+      candidateId: EC2,
+      username: "mei-zhang-ec00002",
+      name: "Mei Zhang",
+      email: "mei.zhang@test.com",
+      phone: "555-402-0002",
+      currentCompany: "QuantLab",
+      currentRole: "Senior Rust Developer",
+      preferredJobType: "c2c",
+      expectedHourlyRate: 115,
+      experienceYears: 6,
+      skills: [
+        "Rust",
+        "Systems Programming",
+        "C++",
+        "Linux",
+        "Networking",
+        "Concurrency",
+      ],
+      location: "New York, NY",
+      profileCountry: "US",
+      bio: "Systems engineer specializing in low-latency Rust applications for trading.",
+      resumeSummary:
+        "6 years writing safety-critical Rust and C++ for HFT firms.",
+      resumeExperience:
+        "QuantLab (2022â€“present): Rust trading engine â€” sub-microsecond latency.\nTradeCore (2019â€“2022): C++ order management system.",
+      resumeEducation: "B.S. Electrical Engineering, MIT, 2019",
+      resumeAchievements:
+        "Reduced tick-to-trade latency by 60% using custom async runtime.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0013",
+      candidateId: EC3,
+      username: "aisha-khan-ec00003",
+      name: "Aisha Khan",
+      email: "aisha.khan@test.com",
+      phone: "555-403-0003",
+      currentCompany: "DataVault",
+      currentRole: "ML Platform Engineer",
+      preferredJobType: "w2",
+      expectedHourlyRate: 100,
+      experienceYears: 7,
+      skills: [
+        "Python",
+        "Kubernetes",
+        "MLflow",
+        "TensorFlow",
+        "Apache Spark",
+        "Docker",
+      ],
+      location: "Seattle, WA",
+      profileCountry: "US",
+      bio: "ML infrastructure engineer building feature stores and model serving platforms.",
+      resumeSummary:
+        "7 years building MLOps infrastructure: training pipelines, feature stores, inference.",
+      resumeExperience:
+        "DataVault (2021â€“present): ML Platform â€” Kubernetes-based training infra for 50+ models.\nAI-Ops (2018â€“2021): Data pipeline engineer.",
+      resumeEducation: "M.S. ML/AI, University of Washington, 2018",
+      resumeAchievements:
+        "Built feature store reducing model development cycle from weeks to days.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0014",
+      candidateId: EC4,
+      username: "daniel-oconnor-ec00004",
+      name: "Daniel O'Connor",
+      email: "daniel.oconnor@test.com",
+      phone: "555-404-0004",
+      currentCompany: "WebCraft",
+      currentRole: "Senior Frontend Lead",
+      preferredJobType: "w2",
+      expectedHourlyRate: 90,
+      experienceYears: 8,
+      skills: [
+        "React",
+        "Next.js",
+        "TypeScript",
+        "Tailwind CSS",
+        "GraphQL",
+        "Node.js",
+      ],
+      location: "Austin, TX",
+      profileCountry: "US",
+      bio: "Frontend lead specializing in React/Next.js and design system architecture.",
+      resumeSummary:
+        "8 years leading frontend teams building performant web applications.",
+      resumeExperience:
+        "WebCraft (2020â€“present): Frontend Lead â€” Next.js RSC migration.\nPixelForge (2017â€“2020): Senior React developer.",
+      resumeEducation: "B.S. Computer Science, Georgia Tech, 2017",
+      resumeAchievements:
+        "Led React 18 migration reducing bundle size by 40% and improving LCP by 50%.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0015",
+      candidateId: EC5,
+      username: "yuki-tanaka-ec00005",
+      name: "Yuki Tanaka",
+      email: "yuki.tanaka@test.com",
+      phone: "555-405-0005",
+      currentCompany: "CloudScale",
+      currentRole: "K8s Platform Engineer",
+      preferredJobType: "1099",
+      expectedHourlyRate: 95,
+      experienceYears: 5,
+      skills: [
+        "Kubernetes",
+        "ArgoCD",
+        "Helm",
+        "Terraform",
+        "Istio",
+        "Go",
+        "AWS",
+      ],
+      location: "Denver, CO",
+      profileCountry: "US",
+      bio: "Platform engineer focused on Kubernetes, GitOps, and service mesh.",
+      resumeSummary:
+        "5 years building and operating production Kubernetes clusters.",
+      resumeExperience:
+        "CloudScale (2022â€“present): Platform Eng â€” ArgoCD + Istio for 100+ services.\nDevOpsHub (2020â€“2022): K8s admin and Terraform modules.",
+      resumeEducation: "B.S. Computer Science, Univ of Colorado, 2020",
+      resumeAchievements:
+        "Migrated 60 services from ECS to K8s with zero downtime.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0016",
+      candidateId: EC6,
+      username: "fatima-ali-ec00006",
+      name: "Fatima Ali",
+      email: "fatima.ali@test.com",
+      phone: "555-406-0006",
+      currentCompany: "InsightAI",
+      currentRole: "Staff Data Scientist",
+      preferredJobType: "w2",
+      expectedHourlyRate: 105,
+      experienceYears: 8,
+      skills: [
+        "Python",
+        "SQL",
+        "Statistics",
+        "Experimentation",
+        "Spark",
+        "R",
+        "Tableau",
+      ],
+      location: "Chicago, IL",
+      profileCountry: "US",
+      bio: "Staff data scientist specializing in experimentation and causal inference.",
+      resumeSummary:
+        "8 years building experimentation platforms and predictive models.",
+      resumeExperience:
+        "InsightAI (2021â€“present): Staff DS â€” A/B testing framework used across 12 product teams.\nDataCore (2018â€“2021): Senior DS â€” churn prediction models.",
+      resumeEducation: "Ph.D. Statistics, University of Chicago, 2018",
+      resumeAchievements:
+        "Built experimentation platform powering 500+ concurrent A/B tests.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0017",
+      candidateId: EC7,
+      username: "lucas-silva-ec00007",
+      name: "Lucas Silva",
+      email: "lucas.silva@test.com",
+      phone: "555-407-0007",
+      currentCompany: "AppForge",
+      currentRole: "iOS Senior Developer",
+      preferredJobType: "1099",
+      expectedHourlyRate: 80,
+      experienceYears: 5,
+      skills: [
+        "Swift",
+        "SwiftUI",
+        "Combine",
+        "Core Data",
+        "UIKit",
+        "REST APIs",
+      ],
+      location: "Boston, MA",
+      profileCountry: "US",
+      bio: "iOS developer building consumer apps with modern Swift and SwiftUI.",
+      resumeSummary: "5 years shipping iOS apps with 4.5+ App Store ratings.",
+      resumeExperience:
+        "AppForge (2022â€“present): iOS Lead â€” SwiftUI rewrite of flagship app.\nMobileFirst (2020â€“2022): iOS developer â€” 3 apps in App Store.",
+      resumeEducation: "B.S. Software Engineering, Boston University, 2020",
+      resumeAchievements: "App Store featured twice, 200k+ downloads.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0018",
+      candidateId: EC8,
+      username: "anna-kowalski-ec00008",
+      name: "Anna Kowalski",
+      email: "anna.kowalski@test.com",
+      phone: "555-408-0008",
+      currentCompany: "CyberGuard",
+      currentRole: "Security Operations Engineer",
+      preferredJobType: "w2",
+      expectedHourlyRate: 95,
+      experienceYears: 6,
+      skills: [
+        "SIEM",
+        "EDR",
+        "Incident Response",
+        "Python",
+        "SOAR",
+        "AWS Security",
+      ],
+      location: "Washington, DC",
+      profileCountry: "US",
+      bio: "Security operations professional with SOC management experience.",
+      resumeSummary:
+        "6 years in security operations: SIEM, EDR, and automated response.",
+      resumeExperience:
+        "CyberGuard (2021â€“present): SecOps Lead â€” managed SOC for 800-node network.\nThreatWatch (2019â€“2021): SOC Analyst â€” SIEM tuning and threat hunting.",
+      resumeEducation: "M.S. Cybersecurity, Johns Hopkins University, 2019",
+      resumeAchievements:
+        "Built SOAR playbooks reducing incident response time by 70%.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0019",
+      candidateId: EC9,
+      username: "raj-krishnan-ec00009",
+      name: "Raj Krishnan",
+      email: "raj.krishnan@test.com",
+      phone: "555-409-0009",
+      currentCompany: "StackBuilder",
+      currentRole: "Senior Full Stack Engineer",
+      preferredJobType: "w2",
+      expectedHourlyRate: 85,
+      experienceYears: 5,
+      skills: [
+        "TypeScript",
+        "React",
+        "Node.js",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+      ],
+      location: "Remote",
+      profileCountry: "US",
+      bio: "Full stack TypeScript engineer building performant web applications.",
+      resumeSummary:
+        "5 years building end-to-end TypeScript apps with React + Node.js.",
+      resumeExperience:
+        "StackBuilder (2022â€“present): Full Stack â€” Next.js + Express microservices.\nCodeWorks (2020â€“2022): React/Node developer.",
+      resumeEducation: "B.Tech Computer Science, IIT Delhi, 2020",
+      resumeAchievements:
+        "Designed real-time notification system handling 10k concurrent WebSocket connections.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
+    {
+      _id: oid(),
+      displayId: "CND-0020",
+      candidateId: EC10,
+      username: "elena-volkov-ec00010",
+      name: "Elena Volkov",
+      email: "elena.volkov@test.com",
+      phone: "555-410-0010",
+      currentCompany: "MobileEdge",
+      currentRole: "Android Developer",
+      preferredJobType: "1099",
+      expectedHourlyRate: 75,
+      experienceYears: 4,
+      skills: [
+        "Kotlin",
+        "Jetpack Compose",
+        "Android",
+        "Hilt",
+        "Coroutines",
+        "Room",
+      ],
+      location: "Atlanta, GA",
+      profileCountry: "US",
+      bio: "Android developer using Kotlin and Jetpack Compose for modern native apps.",
+      resumeSummary:
+        "4 years building Kotlin-first Android apps with modern architecture.",
+      resumeExperience:
+        "MobileEdge (2023â€“present): Android Lead â€” Compose migration.\nAppDev Studio (2021â€“2023): Junior Android developer.",
+      resumeEducation: "B.S. Computer Science, Georgia State University, 2021",
+      resumeAchievements:
+        "Compose migration improved development velocity by 35%.",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      profileLocked: false,
+    },
   ]);
-  console.log(`  ✓ Created ${profiles.length} candidate profiles`);
+  console.log(`  âœ“ Created ${profiles.length} candidate profiles`);
 
   /* ================================================================ */
-  /*  APPLICATIONS — multiple candidates × multiple jobs               */
+  /*  APPLICATIONS â€” multiple candidates Ã— multiple jobs               */
   /* ================================================================ */
-  const A = Array.from({ length: 16 }, () => oid());
+  const A = Array.from({ length: 35 }, () => oid());
 
   const applications = await Application.insertMany([
-    // Alice → 3 jobs
+    // Alice â†’ 3 jobs
     {
       _id: A[0],
       jobId: J[0],
       jobTitle: "Senior React Developer",
       candidateId: C1,
       candidateEmail: "alice.johnson@test.com",
-      coverLetter: "6 years of React/TS experience — strong fit for this role.",
+      coverLetter:
+        "6 years of React/TS experience â€” strong fit for this role.",
       status: "accepted",
     },
     {
@@ -965,10 +1772,10 @@ async function seed() {
       candidateId: C1,
       candidateEmail: "alice.johnson@test.com",
       coverLetter:
-        "Angular and React share many patterns — I can ramp up fast.",
+        "Angular and React share many patterns â€” I can ramp up fast.",
       status: "pending",
     },
-    // Dave → 2 jobs
+    // Dave â†’ 2 jobs
     {
       _id: A[3],
       jobId: J[8],
@@ -987,14 +1794,14 @@ async function seed() {
       coverLetter: "Strong SQL and Python background.",
       status: "pending",
     },
-    // Emma → 2 jobs
+    // Emma â†’ 2 jobs
     {
       _id: A[5],
       jobId: J[2],
       jobTitle: "DevOps / Cloud Engineer",
       candidateId: C3,
       candidateEmail: "emma.davis@test.com",
-      coverLetter: "AWS + K8s + Terraform — exactly my stack.",
+      coverLetter: "AWS + K8s + Terraform â€” exactly my stack.",
       status: "accepted",
     },
     {
@@ -1006,7 +1813,7 @@ async function seed() {
       coverLetter: "SRE and DevOps overlap heavily with my experience.",
       status: "reviewed",
     },
-    // Rahul → 2 jobs
+    // Rahul â†’ 2 jobs
     {
       _id: A[7],
       jobId: J[1],
@@ -1022,10 +1829,10 @@ async function seed() {
       jobTitle: "React Native Mobile Dev",
       candidateId: C4,
       candidateEmail: "rahul.sharma@test.com",
-      coverLetter: "React Native with TypeScript — built 2 production apps.",
+      coverLetter: "React Native with TypeScript â€” built 2 production apps.",
       status: "pending",
     },
-    // Priya → 1 job
+    // Priya â†’ 1 job
     {
       _id: A[9],
       jobId: J[9],
@@ -1035,7 +1842,7 @@ async function seed() {
       coverLetter: "Leading QA automation is exactly what I do.",
       status: "accepted",
     },
-    // James → 1 job
+    // James â†’ 1 job
     {
       _id: A[10],
       jobId: J[4],
@@ -1045,7 +1852,7 @@ async function seed() {
       coverLetter: "ML at scale with TensorFlow and MLOps.",
       status: "accepted",
     },
-    // Sophia → 1 job
+    // Sophia â†’ 1 job
     {
       _id: A[11],
       jobId: J[6],
@@ -1055,7 +1862,7 @@ async function seed() {
       coverLetter: "CISSP + 6 years of security experience.",
       status: "accepted",
     },
-    // Liam → 2 jobs
+    // Liam â†’ 2 jobs
     {
       _id: A[12],
       jobId: J[15],
@@ -1074,7 +1881,7 @@ async function seed() {
       coverLetter: "I can do Java/Spring Boot alongside Go.",
       status: "reviewed",
     },
-    // Nina → 1 job
+    // Nina â†’ 1 job
     {
       _id: A[14],
       jobId: J[7],
@@ -1084,18 +1891,164 @@ async function seed() {
       coverLetter: "Figma + design systems is my forte.",
       status: "pending",
     },
-    // Omar → 1 job
+    // Omar â†’ 1 job
     {
       _id: A[15],
       jobId: J[17],
       jobTitle: "Site Reliability Engineer",
       candidateId: C10,
       candidateEmail: "omar.hassan@test.com",
-      coverLetter: "Prometheus/Grafana/K8s — this is what I do daily.",
+      coverLetter: "Prometheus/Grafana/K8s â€” this is what I do daily.",
+      status: "accepted",
+    },
+
+    // â”€â”€ Employer Applications â”€â”€
+    // Carlos â†’ Principal Software Architect
+    {
+      _id: A[16],
+      jobId: J[20],
+      jobTitle: "Principal Software Architect",
+      candidateId: EC1,
+      candidateEmail: "carlos.reyes@test.com",
+      coverLetter: "10+ years designing distributed systems at scale.",
+      status: "accepted",
+    },
+    // Mei â†’ Senior Rust Developer
+    {
+      _id: A[17],
+      jobId: J[21],
+      jobTitle: "Senior Rust Developer",
+      candidateId: EC2,
+      candidateEmail: "mei.zhang@test.com",
+      coverLetter:
+        "Rust for low-latency trading â€” this is my bread and butter.",
+      status: "accepted",
+    },
+    // Aisha â†’ AI/ML Platform Engineer
+    {
+      _id: A[18],
+      jobId: J[22],
+      jobTitle: "AI/ML Platform Engineer",
+      candidateId: EC3,
+      candidateEmail: "aisha.khan@test.com",
+      coverLetter: "Built MLOps infra from scratch â€” ready to do it again.",
+      status: "accepted",
+    },
+    // Daniel â†’ React/Next.js Lead
+    {
+      _id: A[19],
+      jobId: J[23],
+      jobTitle: "React / Next.js Lead Developer",
+      candidateId: EC4,
+      candidateEmail: "daniel.oconnor@test.com",
+      coverLetter: "React 18 + Next.js RSC expert, shipped apps at scale.",
+      status: "reviewed",
+    },
+    // Yuki â†’ K8s Platform Engineer
+    {
+      _id: A[20],
+      jobId: J[24],
+      jobTitle: "Kubernetes Platform Engineer",
+      candidateId: EC5,
+      candidateEmail: "yuki.tanaka@test.com",
+      coverLetter: "ArgoCD + Istio + Terraform â€” managed 100+ services.",
+      status: "accepted",
+    },
+    // Fatima â†’ Staff Data Scientist
+    {
+      _id: A[21],
+      jobId: J[25],
+      jobTitle: "Staff Data Scientist",
+      candidateId: EC6,
+      candidateEmail: "fatima.ali@test.com",
+      coverLetter:
+        "Experimentation platforms and causal inference are my specialties.",
+      status: "accepted",
+    },
+    // Lucas â†’ iOS/Swift Senior Developer
+    {
+      _id: A[22],
+      jobId: J[26],
+      jobTitle: "iOS / Swift Senior Developer",
+      candidateId: EC7,
+      candidateEmail: "lucas.silva@test.com",
+      coverLetter: "SwiftUI + Combine â€” App Store featured apps.",
+      status: "pending",
+    },
+    // Anna â†’ Security Operations Engineer
+    {
+      _id: A[23],
+      jobId: J[27],
+      jobTitle: "Security Operations Engineer",
+      candidateId: EC8,
+      candidateEmail: "anna.kowalski@test.com",
+      coverLetter: "6 years SOC experience, built SOAR playbooks from scratch.",
+      status: "accepted",
+    },
+    // Raj â†’ Full Stack TS Engineer
+    {
+      _id: A[24],
+      jobId: J[28],
+      jobTitle: "Full-Stack TypeScript Engineer",
+      candidateId: EC9,
+      candidateEmail: "raj.krishnan@test.com",
+      coverLetter: "TypeScript end-to-end: React + Node + PostgreSQL.",
+      status: "reviewed",
+    },
+    // Elena â†’ Android Kotlin Developer
+    {
+      _id: A[25],
+      jobId: J[29],
+      jobTitle: "Android / Kotlin Developer",
+      candidateId: EC10,
+      candidateEmail: "elena.volkov@test.com",
+      coverLetter: "Jetpack Compose migration specialist.",
+      status: "pending",
+    },
+    // Cross-applications: Carlos also on K8s job
+    {
+      _id: A[26],
+      jobId: J[24],
+      jobTitle: "Kubernetes Platform Engineer",
+      candidateId: EC1,
+      candidateEmail: "carlos.reyes@test.com",
+      coverLetter: "K8s is part of my daily architecture work.",
+      status: "reviewed",
+    },
+    // Mei also on Full Stack TS job
+    {
+      _id: A[27],
+      jobId: J[28],
+      jobTitle: "Full-Stack TypeScript Engineer",
+      candidateId: EC2,
+      candidateEmail: "mei.zhang@test.com",
+      coverLetter: "I also do TypeScript alongside Rust.",
+      status: "pending",
+    },
+
+    // ── Alice Johnson → Delta Solutions jobs ──
+    {
+      _id: A[30],
+      jobId: J[32],
+      jobTitle: "Lead React Native Developer",
+      candidateId: C1,
+      candidateEmail: "alice.johnson@test.com",
+      coverLetter:
+        "6+ years React experience translates directly to React Native.",
+      status: "accepted",
+    },
+    {
+      _id: A[31],
+      jobId: J[33],
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+      candidateId: C1,
+      candidateEmail: "alice.johnson@test.com",
+      coverLetter:
+        "Certified AWS Solutions Architect with Kubernetes production experience.",
       status: "accepted",
     },
   ]);
-  console.log(`  ✓ Created ${applications.length} applications`);
+  console.log(`  âœ“ Created ${applications.length} applications`);
 
   // Update application counts on jobs
   const appCounts: Record<string, number> = {};
@@ -1109,26 +2062,63 @@ async function seed() {
   );
 
   /* ================================================================ */
-  /*  COMPANIES — 2                                                    */
+  /*  COMPANIES â€” 2                                                    */
   /* ================================================================ */
   const companies = await Company.insertMany([
     {
       _id: COMPANY_ID,
+      displayId: "CMP-0001",
       name: "Alpha Staffing Solutions",
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      adminUserId: ADMIN_MARKETER,
+      adminEmail: "admin@marketer.com",
     },
     {
       _id: COMPANY2_ID,
+      displayId: "CMP-0002",
       name: "Beta Tech Partners",
-      marketerId: ADMIN_MARKETER2,
-      marketerEmail: "admin@markerter.com",
+      adminUserId: ADMIN_MARKETER2,
+      adminEmail: "admin@markerter.com",
+    },
+    {
+      _id: EMPLOYER_COMPANY_ID,
+      displayId: "CMP-0003",
+      name: "Gamma Workforce",
+      adminUserId: ADMIN_EMPLOYER,
+      adminEmail: "admin@employer.com",
+    },
+    {
+      _id: DELTA_COMPANY_ID,
+      displayId: "CMP-0004",
+      name: "Delta Solutions",
+      adminUserId: ADMIN_DELTA,
+      adminEmail: "admin@delta.com",
+    },
+    {
+      _id: EPSILON_COMPANY_ID,
+      displayId: "CMP-0005",
+      name: "Epsilon Tech",
+      adminUserId: ADMIN_EPSILON,
+      adminEmail: "admin@epsilon.com",
+    },
+    {
+      _id: ZETA_COMPANY_ID,
+      displayId: "CMP-0006",
+      name: "Zeta Corp",
+      adminUserId: ADMIN_ZETA,
+      adminEmail: "admin@zeta.com",
+    },
+    {
+      _id: ETA_COMPANY_ID,
+      displayId: "CMP-0007",
+      name: "Eta Industries",
+      adminUserId: ADMIN_ETA,
+      adminEmail: "admin@eta.com",
     },
   ]);
-  console.log(`  ✓ Created ${companies.length} companies`);
+  console.log(`  âœ“ Created ${companies.length} companies`);
 
   /* ================================================================ */
-  /*  MARKETER-CANDIDATE links — all 10 candidates across 2 companies  */
+  /*  MARKETER-CANDIDATE links â€” all 10 candidates across 2 companies  */
   /* ================================================================ */
   const candidateInfo: [string, string, string, string][] = [
     [C1, "Alice Johnson", "alice.johnson@test.com", "accepted"],
@@ -1143,12 +2133,12 @@ async function seed() {
     [C10, "Omar Hassan", "omar.hassan@test.com", "pending"],
   ];
 
-  const mcRecords = await MarketerCandidate.insertMany([
-    // Alpha Staffing (admin@marketer.com) — 7 candidates
+  const mcRecords = await EmployerCandidate.insertMany([
+    // Alpha Staffing (admin@marketer.com) â€” 7 candidates
     ...candidateInfo.slice(0, 5).map(([cid, name, email, status]) => ({
       _id: oid(),
       companyId: COMPANY_ID,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: cid,
       candidateName: name,
       candidateEmail: email,
@@ -1158,7 +2148,7 @@ async function seed() {
     {
       _id: oid(),
       companyId: COMPANY_ID,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: "",
       candidateName: "Nina Gupta",
       candidateEmail: "nina.gupta@test.com",
@@ -1169,7 +2159,7 @@ async function seed() {
     {
       _id: oid(),
       companyId: COMPANY_ID,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: "",
       candidateName: "Omar Hassan",
       candidateEmail: "omar.hassan@test.com",
@@ -1178,11 +2168,11 @@ async function seed() {
       inviteSentAt: daysAgo(1),
     },
 
-    // Beta Tech Partners (admin@markerter.com) — 5 candidates
+    // Beta Tech Partners (admin@markerter.com) â€” 5 candidates
     ...candidateInfo.slice(5, 8).map(([cid, name, email, status]) => ({
       _id: oid(),
       companyId: COMPANY2_ID,
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       candidateId: cid,
       candidateName: name,
       candidateEmail: email,
@@ -1191,7 +2181,7 @@ async function seed() {
     {
       _id: oid(),
       companyId: COMPANY2_ID,
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       candidateId: "",
       candidateName: "Nina Gupta",
       candidateEmail: "nina.gupta@test.com",
@@ -1202,14 +2192,49 @@ async function seed() {
     {
       _id: oid(),
       companyId: COMPANY2_ID,
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       candidateId: C10,
       candidateName: "Omar Hassan",
       candidateEmail: "omar.hassan@test.com",
       inviteStatus: "accepted",
     },
+
+    // Gamma Workforce (admin@employer.com) â€” 10 employer candidates
+    ...(
+      [
+        [EC1, "Carlos Reyes", "carlos.reyes@test.com", "accepted"],
+        [EC2, "Mei Zhang", "mei.zhang@test.com", "accepted"],
+        [EC3, "Aisha Khan", "aisha.khan@test.com", "accepted"],
+        [EC4, "Daniel O'Connor", "daniel.oconnor@test.com", "accepted"],
+        [EC5, "Yuki Tanaka", "yuki.tanaka@test.com", "accepted"],
+        [EC6, "Fatima Ali", "fatima.ali@test.com", "accepted"],
+        [EC7, "Lucas Silva", "lucas.silva@test.com", "accepted"],
+        [EC8, "Anna Kowalski", "anna.kowalski@test.com", "accepted"],
+        [EC9, "Raj Krishnan", "raj.krishnan@test.com", "accepted"],
+        [EC10, "Elena Volkov", "elena.volkov@test.com", "accepted"],
+      ] as [string, string, string, string][]
+    ).map(([cid, name, email, status]) => ({
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID,
+      employerId: ADMIN_EMPLOYER,
+      candidateId: cid,
+      candidateName: name,
+      candidateEmail: email,
+      inviteStatus: status,
+    })),
+
+    // Delta Solutions (admin@delta.com) — Alice Johnson
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID,
+      employerId: ADMIN_DELTA,
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      candidateEmail: "alice.johnson@test.com",
+      inviteStatus: "accepted",
+    },
   ]);
-  console.log(`  ✓ Created ${mcRecords.length} marketer-candidate records`);
+  console.log(`  âœ“ Created ${mcRecords.length} marketer-candidate records`);
 
   /* ================================================================ */
   /*  COMPANY INVITES                                                  */
@@ -1219,11 +2244,11 @@ async function seed() {
       _id: oid(),
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       candidateEmail: "nina.gupta@test.com",
       candidateName: "Nina Gupta",
-      offerNote: "Join our bench — great DevOps & design opportunities!",
+      offerNote: "Join our bench â€” great DevOps & design opportunities!",
       status: "pending",
       expiresAt: daysFromNow(7),
     },
@@ -1231,8 +2256,8 @@ async function seed() {
       _id: oid(),
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       candidateEmail: "omar.hassan@test.com",
       candidateName: "Omar Hassan",
       offerNote: "We have SRE roles lined up for you.",
@@ -1243,8 +2268,8 @@ async function seed() {
       _id: oid(),
       companyId: COMPANY2_ID,
       companyName: "Beta Tech Partners",
-      marketerId: ADMIN_MARKETER2,
-      marketerEmail: "admin@markerter.com",
+      employerId: ADMIN_MARKETER2,
+      employerEmail: "admin@markerter.com",
       candidateEmail: "nina.gupta@test.com",
       candidateName: "Nina Gupta",
       offerNote: "Exciting design contracts available!",
@@ -1252,17 +2277,17 @@ async function seed() {
       expiresAt: daysFromNow(14),
     },
   ]);
-  console.log(`  ✓ Created ${invites.length} company invites`);
+  console.log(`  âœ“ Created ${invites.length} company invites`);
 
   /* ================================================================ */
-  /*  FORWARDED OPENINGS — marketers forward jobs to their candidates   */
+  /*  FORWARDED OPENINGS â€” marketers forward jobs to their candidates   */
   /* ================================================================ */
   const forwarded = await ForwardedOpening.insertMany([
     // Alpha Staffing forwards
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
       candidateEmail: "alice.johnson@test.com",
@@ -1281,8 +2306,8 @@ async function seed() {
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
       candidateEmail: "dave.brown@test.com",
@@ -1301,8 +2326,8 @@ async function seed() {
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
       candidateEmail: "emma.davis@test.com",
@@ -1320,8 +2345,8 @@ async function seed() {
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
       candidateEmail: "rahul.sharma@test.com",
@@ -1339,8 +2364,8 @@ async function seed() {
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       companyId: COMPANY_ID,
       companyName: "Alpha Staffing Solutions",
       candidateEmail: "priya.patel@test.com",
@@ -1361,8 +2386,8 @@ async function seed() {
     // Beta Tech Partners forwards
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER2,
-      marketerEmail: "admin@markerter.com",
+      employerId: ADMIN_MARKETER2,
+      employerEmail: "admin@markerter.com",
       companyId: COMPANY2_ID,
       companyName: "Beta Tech Partners",
       candidateEmail: "james.wilson@test.com",
@@ -1381,8 +2406,8 @@ async function seed() {
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER2,
-      marketerEmail: "admin@markerter.com",
+      employerId: ADMIN_MARKETER2,
+      employerEmail: "admin@markerter.com",
       companyId: COMPANY2_ID,
       companyName: "Beta Tech Partners",
       candidateEmail: "sophia.martinez@test.com",
@@ -1396,13 +2421,13 @@ async function seed() {
       skillsRequired: ["SIEM", "Penetration Testing", "Python"],
       salaryMin: 130000,
       salaryMax: 170000,
-      note: "CISSP certified — great fit.",
+      note: "CISSP certified â€” great fit.",
       status: "accepted",
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER2,
-      marketerEmail: "admin@markerter.com",
+      employerId: ADMIN_MARKETER2,
+      employerEmail: "admin@markerter.com",
       companyId: COMPANY2_ID,
       companyName: "Beta Tech Partners",
       candidateEmail: "liam.chen@test.com",
@@ -1421,8 +2446,8 @@ async function seed() {
     },
     {
       _id: oid(),
-      marketerId: ADMIN_MARKETER2,
-      marketerEmail: "admin@markerter.com",
+      employerId: ADMIN_MARKETER2,
+      employerEmail: "admin@markerter.com",
       companyId: COMPANY2_ID,
       companyName: "Beta Tech Partners",
       candidateEmail: "omar.hassan@test.com",
@@ -1438,14 +2463,194 @@ async function seed() {
       note: "Omar has deep SRE experience.",
       status: "pending",
     },
+
+    // Gamma Workforce (employer) forwards
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "carlos.reyes@test.com",
+      candidateName: "Carlos Reyes",
+      jobId: J[20],
+      jobTitle: "Principal Software Architect",
+      jobLocation: "San Francisco, CA",
+      jobType: "w2",
+      jobSubType: "salary",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["System Design", "Microservices", "AWS", "Kafka"],
+      salaryMin: 200000,
+      salaryMax: 260000,
+      note: "Carlos is the ideal architect for this role.",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "mei.zhang@test.com",
+      candidateName: "Mei Zhang",
+      jobId: J[21],
+      jobTitle: "Senior Rust Developer",
+      jobLocation: "Remote",
+      jobType: "c2c",
+      jobSubType: "contract",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["Rust", "Systems Programming", "C++"],
+      payPerHour: 120,
+      note: "Mei's Rust expertise is best-in-class.",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "aisha.khan@test.com",
+      candidateName: "Aisha Khan",
+      jobId: J[22],
+      jobTitle: "AI/ML Platform Engineer",
+      jobLocation: "Seattle, WA",
+      jobType: "w2",
+      jobSubType: "salary",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["Python", "Kubernetes", "MLflow", "TensorFlow"],
+      salaryMin: 180000,
+      salaryMax: 230000,
+      note: "Aisha built MLOps infra for 50+ models.",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "yuki.tanaka@test.com",
+      candidateName: "Yuki Tanaka",
+      jobId: J[24],
+      jobTitle: "Kubernetes Platform Engineer",
+      jobLocation: "Denver, CO",
+      jobType: "1099",
+      jobSubType: "contract",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["Kubernetes", "ArgoCD", "Helm", "Terraform"],
+      payPerHour: 100,
+      note: "Yuki migrated 60 services to K8s.",
+      status: "pending",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "fatima.ali@test.com",
+      candidateName: "Fatima Ali",
+      jobId: J[25],
+      jobTitle: "Staff Data Scientist",
+      jobLocation: "Chicago, IL",
+      jobType: "w2",
+      jobSubType: "salary",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["Python", "SQL", "Statistics", "Experimentation"],
+      salaryMin: 170000,
+      salaryMax: 210000,
+      note: "Fatima built experimentation platform for 500+ tests.",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "anna.kowalski@test.com",
+      candidateName: "Anna Kowalski",
+      jobId: J[27],
+      jobTitle: "Security Operations Engineer",
+      jobLocation: "Washington, DC",
+      jobType: "w2",
+      jobSubType: "salary",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["SIEM", "EDR", "Incident Response", "Python"],
+      salaryMin: 140000,
+      salaryMax: 180000,
+      note: "Anna has SOC lead experience.",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_EMPLOYER,
+      employerEmail: "admin@employer.com",
+      companyId: EMPLOYER_COMPANY_ID,
+      companyName: "Gamma Workforce",
+      candidateEmail: "raj.krishnan@test.com",
+      candidateName: "Raj Krishnan",
+      jobId: J[28],
+      jobTitle: "Full-Stack TypeScript Engineer",
+      jobLocation: "Remote",
+      jobType: "w2",
+      jobSubType: "contract",
+      vendorEmail: "admin@employer.com",
+      skillsRequired: ["TypeScript", "React", "Node.js", "PostgreSQL"],
+      payPerHour: 90,
+      note: "Raj is a versatile full-stack engineer.",
+      status: "pending",
+    },
+
+    // Delta Solutions -> Alice Johnson
+    {
+      _id: oid(),
+      employerId: ADMIN_DELTA,
+      employerEmail: "admin@delta.com",
+      companyId: DELTA_COMPANY_ID,
+      companyName: "Delta Solutions",
+      candidateEmail: "alice.johnson@test.com",
+      candidateName: "Alice Johnson",
+      jobId: J[32],
+      jobTitle: "Lead React Native Developer",
+      jobLocation: "Austin, TX",
+      jobType: "w2",
+      jobSubType: "salary",
+      vendorEmail: "admin@delta.com",
+      skillsRequired: ["React Native", "TypeScript", "Redux", "GraphQL"],
+      salaryMin: 150000,
+      salaryMax: 185000,
+      note: "Alice has strong mobile development skills.",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      employerId: ADMIN_DELTA,
+      employerEmail: "admin@delta.com",
+      companyId: DELTA_COMPANY_ID,
+      companyName: "Delta Solutions",
+      candidateEmail: "alice.johnson@test.com",
+      candidateName: "Alice Johnson",
+      jobId: J[33],
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+      jobLocation: "Remote",
+      jobType: "c2c",
+      jobSubType: "hourly",
+      vendorEmail: "admin@delta.com",
+      skillsRequired: ["AWS", "GCP", "Kubernetes", "Terraform"],
+      payPerHour: 95,
+      note: "Alice has excellent cloud architecture experience.",
+      status: "accepted",
+    },
   ]);
-  console.log(`  ✓ Created ${forwarded.length} forwarded openings`);
+  console.log(`  âœ“ Created ${forwarded.length} forwarded openings`);
 
   /* ================================================================ */
-  /*  POKE RECORDS — vendor↔candidate and marketer↔vendor pokes+emails */
+  /*  POKE RECORDS â€” vendorâ†”candidate and marketerâ†”vendor pokes+emails */
   /* ================================================================ */
   const pokeData = [
-    // Vendor → Candidate POKES (in-app)
+    // Vendor â†’ Candidate POKES (in-app)
     {
       senderId: ADMIN_VENDOR,
       senderName: "Admin Vendor",
@@ -1454,7 +2659,7 @@ async function seed() {
       targetId: C1,
       targetEmail: "alice.johnson@test.com",
       targetName: "Alice Johnson",
-      subject: "Strong React profile — interested?",
+      subject: "Strong React profile â€” interested?",
       isEmail: false,
       jobId: J[0],
       jobTitle: "Senior React Developer",
@@ -1467,7 +2672,7 @@ async function seed() {
       targetId: C4,
       targetEmail: "rahul.sharma@test.com",
       targetName: "Rahul Sharma",
-      subject: "Full-stack role — great fit",
+      subject: "Full-stack role â€” great fit",
       isEmail: false,
       jobId: J[1],
       jobTitle: "Full Stack Node.js Engineer",
@@ -1506,7 +2711,7 @@ async function seed() {
       targetId: C5,
       targetEmail: "priya.patel@test.com",
       targetName: "Priya Patel",
-      subject: "QA Lead — your expertise needed",
+      subject: "QA Lead â€” your expertise needed",
       isEmail: false,
       jobId: J[9],
       jobTitle: "QA Automation Lead",
@@ -1538,7 +2743,7 @@ async function seed() {
       jobTitle: "Site Reliability Engineer",
     },
 
-    // Candidate → Vendor POKES (in-app)
+    // Candidate â†’ Vendor POKES (in-app)
     {
       senderId: C1,
       senderName: "Alice Johnson",
@@ -1576,13 +2781,13 @@ async function seed() {
       targetVendorId: V3,
       targetEmail: "sarah.lee@test.com",
       targetName: "Sarah Lee",
-      subject: "Go role — very interested",
+      subject: "Go role â€” very interested",
       isEmail: false,
       jobId: J[15],
       jobTitle: "Staff Backend Engineer (Go)",
     },
 
-    // Vendor → Candidate EMAILS
+    // Vendor â†’ Candidate EMAILS
     {
       senderId: ADMIN_VENDOR,
       senderName: "Admin Vendor",
@@ -1617,7 +2822,7 @@ async function seed() {
       targetId: C2,
       targetEmail: "dave.brown@test.com",
       targetName: "Dave Brown",
-      subject: "Data Engineer — interview scheduling",
+      subject: "Data Engineer â€” interview scheduling",
       isEmail: true,
       jobId: J[8],
       jobTitle: "Python Data Engineer",
@@ -1630,13 +2835,13 @@ async function seed() {
       targetId: C8,
       targetEmail: "liam.chen@test.com",
       targetName: "Liam Chen",
-      subject: "Go role — comp package details",
+      subject: "Go role â€” comp package details",
       isEmail: true,
       jobId: J[15],
       jobTitle: "Staff Backend Engineer (Go)",
     },
 
-    // Candidate → Vendor EMAILS
+    // Candidate â†’ Vendor EMAILS
     {
       senderId: C1,
       senderName: "Alice Johnson",
@@ -1646,7 +2851,7 @@ async function seed() {
       targetVendorId: ADMIN_VENDOR,
       targetEmail: "admin@vendor.com",
       targetName: "Admin Vendor",
-      subject: "Re: React Developer — availability",
+      subject: "Re: React Developer â€” availability",
       isEmail: true,
       jobId: J[0],
       jobTitle: "Senior React Developer",
@@ -1660,7 +2865,7 @@ async function seed() {
       targetVendorId: V2,
       targetEmail: "frank.miller@test.com",
       targetName: "Frank Miller",
-      subject: "Re: Data Engineer — preferred schedule",
+      subject: "Re: Data Engineer â€” preferred schedule",
       isEmail: true,
       jobId: J[8],
       jobTitle: "Python Data Engineer",
@@ -1674,13 +2879,13 @@ async function seed() {
       targetVendorId: ADMIN_VENDOR,
       targetEmail: "admin@vendor.com",
       targetName: "Admin Vendor",
-      subject: "Node.js role — portfolio link",
+      subject: "Node.js role â€” portfolio link",
       isEmail: true,
       jobId: J[1],
       jobTitle: "Full Stack Node.js Engineer",
     },
 
-    // Marketer → Vendor POKES
+    // Marketer â†’ Vendor POKES
     {
       senderId: ADMIN_MARKETER,
       senderName: "Admin Marketer",
@@ -1710,7 +2915,7 @@ async function seed() {
       jobTitle: "Python Data Engineer",
     },
 
-    // Marketer → Vendor EMAILS
+    // Marketer â†’ Vendor EMAILS
     {
       senderId: ADMIN_MARKETER,
       senderName: "Admin Marketer",
@@ -1720,7 +2925,7 @@ async function seed() {
       targetVendorId: ADMIN_VENDOR,
       targetEmail: "admin@vendor.com",
       targetName: "Admin Vendor",
-      subject: "Candidate profiles — Alpha Staffing",
+      subject: "Candidate profiles â€” Alpha Staffing",
       isEmail: true,
       jobId: J[0],
       jobTitle: "Senior React Developer",
@@ -1739,15 +2944,139 @@ async function seed() {
       jobId: J[15],
       jobTitle: "Staff Backend Engineer (Go)",
     },
+
+    // Employer â†’ Candidate POKES (in-app)
+    {
+      senderId: ADMIN_EMPLOYER,
+      senderName: "Admin Employer",
+      senderEmail: "admin@employer.com",
+      senderType: "vendor",
+      targetId: EC1,
+      targetEmail: "carlos.reyes@test.com",
+      targetName: "Carlos Reyes",
+      subject: "Interested in Principal Architect role?",
+      isEmail: false,
+      jobId: J[20],
+      jobTitle: "Principal Software Architect",
+    },
+    {
+      senderId: ADMIN_EMPLOYER,
+      senderName: "Admin Employer",
+      senderEmail: "admin@employer.com",
+      senderType: "vendor",
+      targetId: EC2,
+      targetEmail: "mei.zhang@test.com",
+      targetName: "Mei Zhang",
+      subject: "Rust developer opportunity",
+      isEmail: false,
+      jobId: J[21],
+      jobTitle: "Senior Rust Developer",
+    },
+    {
+      senderId: ADMIN_EMPLOYER,
+      senderName: "Admin Employer",
+      senderEmail: "admin@employer.com",
+      senderType: "vendor",
+      targetId: EC3,
+      targetEmail: "aisha.khan@test.com",
+      targetName: "Aisha Khan",
+      subject: "ML Platform role â€” perfect for your background",
+      isEmail: false,
+      jobId: J[22],
+      jobTitle: "AI/ML Platform Engineer",
+    },
+    {
+      senderId: ADMIN_EMPLOYER,
+      senderName: "Admin Employer",
+      senderEmail: "admin@employer.com",
+      senderType: "vendor",
+      targetId: EC5,
+      targetEmail: "yuki.tanaka@test.com",
+      targetName: "Yuki Tanaka",
+      subject: "K8s platform engineer role",
+      isEmail: false,
+      jobId: J[24],
+      jobTitle: "Kubernetes Platform Engineer",
+    },
+    {
+      senderId: ADMIN_EMPLOYER,
+      senderName: "Admin Employer",
+      senderEmail: "admin@employer.com",
+      senderType: "vendor",
+      targetId: EC8,
+      targetEmail: "anna.kowalski@test.com",
+      targetName: "Anna Kowalski",
+      subject: "Security ops position available",
+      isEmail: false,
+      jobId: J[27],
+      jobTitle: "Security Operations Engineer",
+    },
+    // Employer â†’ Vendor EMAIL (as marketer contacting a vendor)
+    {
+      senderId: ADMIN_EMPLOYER,
+      senderName: "Admin Employer",
+      senderEmail: "admin@employer.com",
+      senderType: "marketer",
+      targetId: ADMIN_VENDOR,
+      targetVendorId: ADMIN_VENDOR,
+      targetEmail: "admin@vendor.com",
+      targetName: "Admin Vendor",
+      subject: "Gamma Workforce â€” candidate profiles for your review",
+      isEmail: true,
+      jobId: J[0],
+      jobTitle: "Senior React Developer",
+    },
+
+    // Delta Solutions (employer) -> Alice Johnson POKES
+    {
+      senderId: ADMIN_DELTA,
+      senderName: "Admin Delta",
+      senderEmail: "admin@delta.com",
+      senderType: "vendor",
+      targetId: C1,
+      targetEmail: "alice.johnson@test.com",
+      targetName: "Alice Johnson",
+      subject: "Lead React Native Developer role at Delta",
+      isEmail: false,
+      jobId: J[32],
+      jobTitle: "Lead React Native Developer",
+    },
+    {
+      senderId: ADMIN_DELTA,
+      senderName: "Admin Delta",
+      senderEmail: "admin@delta.com",
+      senderType: "vendor",
+      targetId: C1,
+      targetEmail: "alice.johnson@test.com",
+      targetName: "Alice Johnson",
+      subject: "Cloud Infrastructure Engineer - remote opportunity",
+      isEmail: false,
+      jobId: J[33],
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+    },
+    // Delta Solutions -> Alice Johnson EMAILS
+    {
+      senderId: ADMIN_DELTA,
+      senderName: "Admin Delta",
+      senderEmail: "admin@delta.com",
+      senderType: "vendor",
+      targetId: C1,
+      targetEmail: "alice.johnson@test.com",
+      targetName: "Alice Johnson",
+      subject: "Delta Solutions - React Native role details and next steps",
+      isEmail: true,
+      jobId: J[32],
+      jobTitle: "Lead React Native Developer",
+    },
   ];
 
   const pokes = await PokeRecord.insertMany(
     pokeData.map((p) => ({ _id: oid(), ...p })),
   );
-  console.log(`  ✓ Created ${pokes.length} poke records`);
+  console.log(`  âœ“ Created ${pokes.length} poke records`);
 
   /* ================================================================ */
-  /*  POKE LOGS — monthly usage                                        */
+  /*  POKE LOGS â€” monthly usage                                        */
   /* ================================================================ */
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1770,17 +3099,19 @@ async function seed() {
     { _id: oid(), userId: ADMIN_MARKETER, yearMonth: ym, count: 5 },
     { _id: oid(), userId: ADMIN_MARKETER, yearMonth: lastYM, count: 8 },
     { _id: oid(), userId: ADMIN_MARKETER2, yearMonth: ym, count: 3 },
+    { _id: oid(), userId: ADMIN_EMPLOYER, yearMonth: ym, count: 6 },
+    { _id: oid(), userId: ADMIN_EMPLOYER, yearMonth: lastYM, count: 10 },
   ]);
-  console.log(`  ✓ Created ${pokeLogs.length} poke logs`);
+  console.log(`  âœ“ Created ${pokeLogs.length} poke logs`);
 
   /* ================================================================ */
-  /*  PROJECT FINANCIALS — 8 active/completed projects                 */
+  /*  PROJECT FINANCIALS â€” 8 active/completed projects                 */
   /* ================================================================ */
   const financials = await ProjectFinancial.insertMany([
     {
       _id: oid(),
       applicationId: A[0],
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: C1,
       candidateName: "Alice Johnson",
       jobTitle: "Senior React Developer",
@@ -1805,13 +3136,13 @@ async function seed() {
       netPayable: 32314,
       amountPaid: 25000,
       amountPending: 7314,
-      notes: "Ongoing — billed monthly",
+      notes: "Ongoing â€” billed monthly",
       status: "active",
     },
     {
       _id: oid(),
       applicationId: A[3],
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: C2,
       candidateName: "Dave Brown",
       jobTitle: "Python Data Engineer",
@@ -1842,7 +3173,7 @@ async function seed() {
     {
       _id: oid(),
       applicationId: A[5],
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: C3,
       candidateName: "Emma Davis",
       jobTitle: "DevOps / Cloud Engineer",
@@ -1867,13 +3198,13 @@ async function seed() {
       netPayable: 49920,
       amountPaid: 49920,
       amountPending: 0,
-      notes: "Completed — fully paid",
+      notes: "Completed â€” fully paid",
       status: "completed",
     },
     {
       _id: oid(),
       applicationId: A[7],
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: C4,
       candidateName: "Rahul Sharma",
       jobTitle: "Full Stack Node.js Engineer",
@@ -1898,13 +3229,13 @@ async function seed() {
       netPayable: 14476,
       amountPaid: 10000,
       amountPending: 4476,
-      notes: "Ongoing — CA taxes apply",
+      notes: "Ongoing â€” CA taxes apply",
       status: "active",
     },
     {
       _id: oid(),
       applicationId: A[9],
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: C5,
       candidateName: "Priya Patel",
       jobTitle: "QA Automation Lead",
@@ -1937,7 +3268,7 @@ async function seed() {
     {
       _id: oid(),
       applicationId: A[10],
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       candidateId: C6,
       candidateName: "James Wilson",
       jobTitle: "Machine Learning Engineer",
@@ -1968,7 +3299,7 @@ async function seed() {
     {
       _id: oid(),
       applicationId: A[11],
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       candidateId: C7,
       candidateName: "Sophia Martinez",
       jobTitle: "Cybersecurity Analyst",
@@ -1993,13 +3324,13 @@ async function seed() {
       netPayable: 36192,
       amountPaid: 36192,
       amountPending: 0,
-      notes: "Completed — full cycle",
+      notes: "Completed â€” full cycle",
       status: "completed",
     },
     {
       _id: oid(),
       applicationId: A[12],
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       candidateId: C8,
       candidateName: "Liam Chen",
       jobTitle: "Staff Backend Engineer (Go)",
@@ -2024,14 +3355,235 @@ async function seed() {
       netPayable: 17233,
       amountPaid: 9500,
       amountPending: 7733,
-      notes: "Ongoing — senior Go role",
+      notes: "Ongoing â€” senior Go role",
+      status: "active",
+    },
+
+    // â”€â”€ Employer (Gamma Workforce) Financials â”€â”€
+    {
+      _id: oid(),
+      applicationId: A[16],
+      employerId: ADMIN_EMPLOYER,
+      candidateId: EC1,
+      candidateName: "Carlos Reyes",
+      jobTitle: "Principal Software Architect",
+      vendorName: "Admin Employer",
+      vendorCompanyName: "Gamma Workforce",
+      clientName: "Meta",
+      implementationPartner: "Cognizant",
+      pocName: "Lisa Wang",
+      pocEmail: "lisa.w@meta.com",
+      billRate: 130,
+      payRate: 105,
+      hoursWorked: 600,
+      projectStart: new Date("2025-01-15"),
+      projectEnd: null,
+      stateCode: "CA",
+      stateTaxPct: 9.3,
+      cashPct: 0,
+      totalBilled: 78000,
+      totalPay: 63000,
+      taxAmount: 5859,
+      cashAmount: 0,
+      netPayable: 57141,
+      amountPaid: 42000,
+      amountPending: 15141,
+      notes: "Ongoing â€” senior architect placement",
+      status: "active",
+    },
+    {
+      _id: oid(),
+      applicationId: A[17],
+      employerId: ADMIN_EMPLOYER,
+      candidateId: EC2,
+      candidateName: "Mei Zhang",
+      jobTitle: "Senior Rust Developer",
+      vendorName: "Admin Employer",
+      vendorCompanyName: "Gamma Workforce",
+      clientName: "Citadel",
+      implementationPartner: "",
+      pocName: "Mark Sullivan",
+      pocEmail: "mark.s@citadel.com",
+      billRate: 145,
+      payRate: 115,
+      hoursWorked: 320,
+      projectStart: new Date("2025-05-01"),
+      projectEnd: null,
+      stateCode: "NY",
+      stateTaxPct: 6.5,
+      cashPct: 0,
+      totalBilled: 46400,
+      totalPay: 36800,
+      taxAmount: 2392,
+      cashAmount: 0,
+      netPayable: 34408,
+      amountPaid: 23000,
+      amountPending: 11408,
+      notes: "Ongoing â€” Rust trading engine",
+      status: "active",
+    },
+    {
+      _id: oid(),
+      applicationId: A[18],
+      employerId: ADMIN_EMPLOYER,
+      candidateId: EC3,
+      candidateName: "Aisha Khan",
+      jobTitle: "AI/ML Platform Engineer",
+      vendorName: "Admin Employer",
+      vendorCompanyName: "Gamma Workforce",
+      clientName: "Amazon",
+      implementationPartner: "Wipro",
+      pocName: "James Park",
+      pocEmail: "james.p@amazon.com",
+      billRate: 115,
+      payRate: 95,
+      hoursWorked: 400,
+      projectStart: new Date("2025-04-01"),
+      projectEnd: null,
+      stateCode: "WA",
+      stateTaxPct: 0,
+      cashPct: 0,
+      totalBilled: 46000,
+      totalPay: 38000,
+      taxAmount: 0,
+      cashAmount: 0,
+      netPayable: 38000,
+      amountPaid: 28500,
+      amountPending: 9500,
+      notes: "Ongoing â€” MLOps platform build",
+      status: "active",
+    },
+    {
+      _id: oid(),
+      applicationId: A[21],
+      employerId: ADMIN_EMPLOYER,
+      candidateId: EC6,
+      candidateName: "Fatima Ali",
+      jobTitle: "Staff Data Scientist",
+      vendorName: "Admin Employer",
+      vendorCompanyName: "Gamma Workforce",
+      clientName: "Spotify",
+      implementationPartner: "",
+      pocName: "Emma Torres",
+      pocEmail: "emma.t@spotify.com",
+      billRate: 110,
+      payRate: 88,
+      hoursWorked: 160,
+      projectStart: new Date("2025-08-01"),
+      projectEnd: new Date("2025-11-30"),
+      stateCode: "IL",
+      stateTaxPct: 4.95,
+      cashPct: 0,
+      totalBilled: 17600,
+      totalPay: 14080,
+      taxAmount: 697,
+      cashAmount: 0,
+      netPayable: 13383,
+      amountPaid: 13383,
+      amountPending: 0,
+      notes: "Completed â€” experimentation audit",
+      status: "completed",
+    },
+    {
+      _id: oid(),
+      applicationId: A[23],
+      employerId: ADMIN_EMPLOYER,
+      candidateId: EC8,
+      candidateName: "Anna Kowalski",
+      jobTitle: "Security Operations Engineer",
+      vendorName: "Admin Employer",
+      vendorCompanyName: "Gamma Workforce",
+      clientName: "Capital One",
+      implementationPartner: "Deloitte",
+      pocName: "Tom Brady",
+      pocEmail: "tom.b@capitalone.com",
+      billRate: 100,
+      payRate: 80,
+      hoursWorked: 240,
+      projectStart: new Date("2025-06-15"),
+      projectEnd: null,
+      stateCode: "VA",
+      stateTaxPct: 5.75,
+      cashPct: 0,
+      totalBilled: 24000,
+      totalPay: 19200,
+      taxAmount: 1104,
+      cashAmount: 0,
+      netPayable: 18096,
+      amountPaid: 12800,
+      amountPending: 5296,
+      notes: "Ongoing â€” SOC automation project",
+      status: "active",
+    },
+
+    // -- Delta Solutions (admin@delta.com) Financials --
+    {
+      _id: oid(),
+      applicationId: A[30],
+      employerId: ADMIN_DELTA,
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      jobTitle: "Lead React Native Developer",
+      vendorName: "Admin Delta",
+      vendorCompanyName: "Delta Solutions",
+      clientName: "Apple",
+      implementationPartner: "Accenture",
+      pocName: "Jennifer Lee",
+      pocEmail: "jennifer.l@apple.com",
+      billRate: 105,
+      payRate: 85,
+      hoursWorked: 320,
+      projectStart: new Date("2025-04-15"),
+      projectEnd: null,
+      stateCode: "TX",
+      stateTaxPct: 0,
+      cashPct: 0,
+      totalBilled: 33600,
+      totalPay: 27200,
+      taxAmount: 0,
+      cashAmount: 0,
+      netPayable: 27200,
+      amountPaid: 20400,
+      amountPending: 6800,
+      notes: "Ongoing - React Native mobile platform",
+      status: "active",
+    },
+    {
+      _id: oid(),
+      applicationId: A[31],
+      employerId: ADMIN_DELTA,
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+      vendorName: "Admin Delta",
+      vendorCompanyName: "Delta Solutions",
+      clientName: "Tesla",
+      implementationPartner: "",
+      pocName: "David Chen",
+      pocEmail: "david.c@tesla.com",
+      billRate: 95,
+      payRate: 75,
+      hoursWorked: 200,
+      projectStart: new Date("2025-07-01"),
+      projectEnd: null,
+      stateCode: "TX",
+      stateTaxPct: 0,
+      cashPct: 0,
+      totalBilled: 19000,
+      totalPay: 15000,
+      taxAmount: 0,
+      cashAmount: 0,
+      netPayable: 15000,
+      amountPaid: 11250,
+      amountPending: 3750,
+      notes: "Ongoing - cloud migration project",
       status: "active",
     },
   ]);
-  console.log(`  ✓ Created ${financials.length} project financials`);
+  console.log(`  âœ“ Created ${financials.length} project financials`);
 
   /* ================================================================ */
-  /*  TIMESHEETS — multiple weeks for active project candidates        */
+  /*  TIMESHEETS â€” multiple weeks for active project candidates        */
   /* ================================================================ */
   const monday = (weeksAgo: number) => {
     const d = new Date();
@@ -2044,12 +3596,12 @@ async function seed() {
   const partWeek2 = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 4, sat: 0, sun: 0 };
 
   const timesheets = await Timesheet.insertMany([
-    // Alice (C1) — 4 weeks
+    // Alice (C1) â€” 4 weeks
     {
       _id: oid(),
       candidateId: C1,
       candidateName: "Alice Johnson",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[0],
       jobTitle: "Senior React Developer",
@@ -2064,7 +3616,7 @@ async function seed() {
       _id: oid(),
       candidateId: C1,
       candidateName: "Alice Johnson",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[0],
       jobTitle: "Senior React Developer",
@@ -2079,7 +3631,7 @@ async function seed() {
       _id: oid(),
       candidateId: C1,
       candidateName: "Alice Johnson",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[0],
       jobTitle: "Senior React Developer",
@@ -2093,7 +3645,7 @@ async function seed() {
       _id: oid(),
       candidateId: C1,
       candidateName: "Alice Johnson",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[0],
       jobTitle: "Senior React Developer",
@@ -2103,12 +3655,12 @@ async function seed() {
       status: "draft",
     },
 
-    // Dave (C2) — 3 weeks
+    // Dave (C2) â€” 3 weeks
     {
       _id: oid(),
       candidateId: C2,
       candidateName: "Dave Brown",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[3],
       jobTitle: "Python Data Engineer",
@@ -2123,7 +3675,7 @@ async function seed() {
       _id: oid(),
       candidateId: C2,
       candidateName: "Dave Brown",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[3],
       jobTitle: "Python Data Engineer",
@@ -2137,7 +3689,7 @@ async function seed() {
       _id: oid(),
       candidateId: C2,
       candidateName: "Dave Brown",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[3],
       jobTitle: "Python Data Engineer",
@@ -2147,12 +3699,12 @@ async function seed() {
       status: "draft",
     },
 
-    // Rahul (C4) — 2 weeks
+    // Rahul (C4) â€” 2 weeks
     {
       _id: oid(),
       candidateId: C4,
       candidateName: "Rahul Sharma",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[7],
       jobTitle: "Full Stack Node.js Engineer",
@@ -2166,7 +3718,7 @@ async function seed() {
       _id: oid(),
       candidateId: C4,
       candidateName: "Rahul Sharma",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[7],
       jobTitle: "Full Stack Node.js Engineer",
@@ -2176,12 +3728,12 @@ async function seed() {
       status: "draft",
     },
 
-    // Priya (C5) — 2 weeks
+    // Priya (C5) â€” 2 weeks
     {
       _id: oid(),
       candidateId: C5,
       candidateName: "Priya Patel",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[9],
       jobTitle: "QA Automation Lead",
@@ -2196,7 +3748,7 @@ async function seed() {
       _id: oid(),
       candidateId: C5,
       candidateName: "Priya Patel",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: A[9],
       jobTitle: "QA Automation Lead",
@@ -2207,12 +3759,12 @@ async function seed() {
       submittedAt: daysAgo(1),
     },
 
-    // James (C6) — Beta Tech — 3 weeks
+    // James (C6) â€” Beta Tech â€” 3 weeks
     {
       _id: oid(),
       candidateId: C6,
       candidateName: "James Wilson",
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       companyId: COMPANY2_ID,
       applicationId: A[10],
       jobTitle: "Machine Learning Engineer",
@@ -2227,7 +3779,7 @@ async function seed() {
       _id: oid(),
       candidateId: C6,
       candidateName: "James Wilson",
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       companyId: COMPANY2_ID,
       applicationId: A[10],
       jobTitle: "Machine Learning Engineer",
@@ -2241,7 +3793,7 @@ async function seed() {
       _id: oid(),
       candidateId: C6,
       candidateName: "James Wilson",
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       companyId: COMPANY2_ID,
       applicationId: A[10],
       jobTitle: "Machine Learning Engineer",
@@ -2251,12 +3803,12 @@ async function seed() {
       status: "draft",
     },
 
-    // Liam (C8) — Beta Tech — 2 weeks
+    // Liam (C8) â€” Beta Tech â€” 2 weeks
     {
       _id: oid(),
       candidateId: C8,
       candidateName: "Liam Chen",
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       companyId: COMPANY2_ID,
       applicationId: A[12],
       jobTitle: "Staff Backend Engineer (Go)",
@@ -2270,7 +3822,7 @@ async function seed() {
       _id: oid(),
       candidateId: C8,
       candidateName: "Liam Chen",
-      marketerId: ADMIN_MARKETER2,
+      employerId: ADMIN_MARKETER2,
       companyId: COMPANY2_ID,
       applicationId: A[12],
       jobTitle: "Staff Backend Engineer (Go)",
@@ -2279,11 +3831,231 @@ async function seed() {
       totalHours: 22,
       status: "draft",
     },
+
+    // â”€â”€ Employer Timesheets (Gamma Workforce) â”€â”€
+    // Carlos (EC1) â€” 3 weeks
+    {
+      _id: oid(),
+      candidateId: EC1,
+      candidateName: "Carlos Reyes",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[16],
+      jobTitle: "Principal Software Architect",
+      weekStart: monday(2),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "approved",
+      submittedAt: daysAgo(12),
+    },
+    {
+      _id: oid(),
+      candidateId: EC1,
+      candidateName: "Carlos Reyes",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[16],
+      jobTitle: "Principal Software Architect",
+      weekStart: monday(1),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "submitted",
+      submittedAt: daysAgo(4),
+    },
+    {
+      _id: oid(),
+      candidateId: EC1,
+      candidateName: "Carlos Reyes",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[16],
+      jobTitle: "Principal Software Architect",
+      weekStart: monday(0),
+      entries: partWeek2,
+      totalHours: 36,
+      status: "draft",
+    },
+
+    // Mei (EC2) â€” 2 weeks
+    {
+      _id: oid(),
+      candidateId: EC2,
+      candidateName: "Mei Zhang",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[17],
+      jobTitle: "Senior Rust Developer",
+      weekStart: monday(1),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "submitted",
+      submittedAt: daysAgo(3),
+    },
+    {
+      _id: oid(),
+      candidateId: EC2,
+      candidateName: "Mei Zhang",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[17],
+      jobTitle: "Senior Rust Developer",
+      weekStart: monday(0),
+      entries: partWeek1,
+      totalHours: 22,
+      status: "draft",
+    },
+
+    // Aisha (EC3) â€” 2 weeks
+    {
+      _id: oid(),
+      candidateId: EC3,
+      candidateName: "Aisha Khan",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[18],
+      jobTitle: "AI/ML Platform Engineer",
+      weekStart: monday(1),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "approved",
+      submittedAt: daysAgo(10),
+    },
+    {
+      _id: oid(),
+      candidateId: EC3,
+      candidateName: "Aisha Khan",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[18],
+      jobTitle: "AI/ML Platform Engineer",
+      weekStart: monday(0),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "submitted",
+      submittedAt: daysAgo(1),
+    },
+
+    // Anna (EC8) â€” 2 weeks
+    {
+      _id: oid(),
+      candidateId: EC8,
+      candidateName: "Anna Kowalski",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[23],
+      jobTitle: "Security Operations Engineer",
+      weekStart: monday(1),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "submitted",
+      submittedAt: daysAgo(5),
+    },
+    {
+      _id: oid(),
+      candidateId: EC8,
+      candidateName: "Anna Kowalski",
+      employerId: ADMIN_EMPLOYER,
+      companyId: EMPLOYER_COMPANY_ID,
+      applicationId: A[23],
+      jobTitle: "Security Operations Engineer",
+      weekStart: monday(0),
+      entries: partWeek2,
+      totalHours: 36,
+      status: "draft",
+    },
+
+    // -- Delta Solutions (admin@delta.com) -> Alice Johnson timesheets --
+    {
+      _id: oid(),
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      employerId: ADMIN_DELTA,
+      companyId: DELTA_COMPANY_ID,
+      applicationId: A[30],
+      jobTitle: "Lead React Native Developer",
+      weekStart: monday(3),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "approved",
+      submittedAt: daysAgo(20),
+      approvedAt: daysAgo(19),
+    },
+    {
+      _id: oid(),
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      employerId: ADMIN_DELTA,
+      companyId: DELTA_COMPANY_ID,
+      applicationId: A[30],
+      jobTitle: "Lead React Native Developer",
+      weekStart: monday(2),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "approved",
+      submittedAt: daysAgo(13),
+      approvedAt: daysAgo(12),
+    },
+    {
+      _id: oid(),
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      employerId: ADMIN_DELTA,
+      companyId: DELTA_COMPANY_ID,
+      applicationId: A[30],
+      jobTitle: "Lead React Native Developer",
+      weekStart: monday(1),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "submitted",
+      submittedAt: daysAgo(4),
+    },
+    {
+      _id: oid(),
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      employerId: ADMIN_DELTA,
+      companyId: DELTA_COMPANY_ID,
+      applicationId: A[31],
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+      weekStart: monday(2),
+      entries: partWeek2,
+      totalHours: 36,
+      status: "approved",
+      submittedAt: daysAgo(12),
+      approvedAt: daysAgo(11),
+    },
+    {
+      _id: oid(),
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      employerId: ADMIN_DELTA,
+      companyId: DELTA_COMPANY_ID,
+      applicationId: A[31],
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+      weekStart: monday(1),
+      entries: fullWeek,
+      totalHours: 40,
+      status: "submitted",
+      submittedAt: daysAgo(3),
+    },
+    {
+      _id: oid(),
+      candidateId: C1,
+      candidateName: "Alice Johnson",
+      employerId: ADMIN_DELTA,
+      companyId: DELTA_COMPANY_ID,
+      applicationId: A[31],
+      jobTitle: "Senior Cloud Infrastructure Engineer",
+      weekStart: monday(0),
+      entries: partWeek1,
+      totalHours: 22,
+      status: "draft",
+    },
   ]);
-  console.log(`  ✓ Created ${timesheets.length} timesheets`);
+  console.log(`  âœ“ Created ${timesheets.length} timesheets`);
 
   /* ================================================================ */
-  /*  INTERVIEW INVITES — 8 interviews                                 */
+  /*  INTERVIEW INVITES â€” 8 interviews                                 */
   /* ================================================================ */
   const interviews = await InterviewInvite.insertMany([
     {
@@ -2299,7 +4071,7 @@ async function seed() {
       interviewTime: "10:00 AM EST",
       interviewType: "video",
       interviewLink: "https://meet.example.com/react-alice",
-      notes: "Technical round — React deep dive + system design",
+      notes: "Technical round â€” React deep dive + system design",
       status: "pending",
     },
     {
@@ -2331,7 +4103,7 @@ async function seed() {
       interviewTime: "11:00 AM PST",
       interviewType: "phone",
       interviewLink: "",
-      notes: "Initial phone screen — MERN experience",
+      notes: "Initial phone screen â€” MERN experience",
       status: "pending",
     },
     {
@@ -2379,7 +4151,7 @@ async function seed() {
       interviewTime: "10:00 AM PST",
       interviewType: "video",
       interviewLink: "https://meet.example.com/go-liam",
-      notes: "System design — distributed systems",
+      notes: "System design â€” distributed systems",
       status: "accepted",
     },
     {
@@ -2414,13 +4186,1541 @@ async function seed() {
       notes: "ML system design + model deployment",
       status: "pending",
     },
+
+    // â”€â”€ Employer Interview Invites â”€â”€
+    {
+      _id: oid(),
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      vendorName: "Admin Employer",
+      candidateEmail: "carlos.reyes@test.com",
+      candidateName: "Carlos Reyes",
+      jobId: J[20],
+      jobTitle: "Principal Software Architect",
+      interviewDate: daysFromNow(2),
+      interviewTime: "10:00 AM PST",
+      interviewType: "video",
+      interviewLink: "https://meet.example.com/arch-carlos",
+      notes: "System design deep-dive â€” distributed architecture",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      vendorName: "Admin Employer",
+      candidateEmail: "mei.zhang@test.com",
+      candidateName: "Mei Zhang",
+      jobId: J[21],
+      jobTitle: "Senior Rust Developer",
+      interviewDate: daysFromNow(3),
+      interviewTime: "2:00 PM EST",
+      interviewType: "video",
+      interviewLink: "https://meet.example.com/rust-mei",
+      notes: "Rust systems programming â€” concurrency patterns",
+      status: "accepted",
+    },
+    {
+      _id: oid(),
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      vendorName: "Admin Employer",
+      candidateEmail: "aisha.khan@test.com",
+      candidateName: "Aisha Khan",
+      jobId: J[22],
+      jobTitle: "AI/ML Platform Engineer",
+      interviewDate: daysFromNow(5),
+      interviewTime: "11:00 AM PST",
+      interviewType: "video",
+      interviewLink: "https://meet.example.com/ml-aisha",
+      notes: "MLOps infrastructure design review",
+      status: "pending",
+    },
+    {
+      _id: oid(),
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      vendorName: "Admin Employer",
+      candidateEmail: "yuki.tanaka@test.com",
+      candidateName: "Yuki Tanaka",
+      jobId: J[24],
+      jobTitle: "Kubernetes Platform Engineer",
+      interviewDate: daysFromNow(6),
+      interviewTime: "9:00 AM MST",
+      interviewType: "phone",
+      interviewLink: "",
+      notes: "K8s platform eng â€” ArgoCD + Istio discussion",
+      status: "pending",
+    },
+    {
+      _id: oid(),
+      vendorId: ADMIN_EMPLOYER,
+      vendorEmail: "admin@employer.com",
+      vendorName: "Admin Employer",
+      candidateEmail: "anna.kowalski@test.com",
+      candidateName: "Anna Kowalski",
+      jobId: J[27],
+      jobTitle: "Security Operations Engineer",
+      interviewDate: daysFromNow(4),
+      interviewTime: "3:00 PM EST",
+      interviewType: "video",
+      interviewLink: "https://meet.example.com/secops-anna",
+      notes: "SOC automation + SOAR playbooks review",
+      status: "accepted",
+    },
   ]);
-  console.log(`  ✓ Created ${interviews.length} interview invites`);
+  console.log(`  âœ“ Created ${interviews.length} interview invites`);
+
+  /* ================================================================ */
+  /*  COMPANY ADMINS â€” 3 (one per company)                             */
+  /* ================================================================ */
+  /* ================================================================ */
+  /*  SUBSCRIPTION PLANS â€” 4 (upsert defaults)                         */
+  /* ================================================================ */
+  const plans = await SubscriptionPlan.insertMany(DEFAULT_PLANS);
+  console.log(`  âœ“ Created ${plans.length} subscription plans`);
+
+  const companyAdmins = await CompanyAdmin.insertMany([
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      companyName: "Alpha Staffing Solutions",
+      adminUserId: ADMIN_MARKETER,
+      adminEmail: "admin@marketer.com",
+      adminName: "Admin Marketer",
+      subscriptionPlanId: null,
+      seatLimit: 10,
+      seatsUsed: 4,
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY2_ID.toString(),
+      companyName: "Beta Tech Partners",
+      adminUserId: ADMIN_MARKETER2,
+      adminEmail: "admin@markerter.com",
+      adminName: "Admin Marketer 2",
+      subscriptionPlanId: null,
+      seatLimit: 5,
+      seatsUsed: 2,
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      adminUserId: ADMIN_EMPLOYER,
+      adminEmail: "admin@employer.com",
+      adminName: "Admin Employer",
+      subscriptionPlanId: null,
+      seatLimit: 10,
+      seatsUsed: 5,
+    },
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      companyName: "Delta Solutions",
+      adminUserId: ADMIN_DELTA,
+      adminEmail: "admin@delta.com",
+      adminName: "Admin Delta",
+      subscriptionPlanId: null,
+      seatLimit: 10,
+      seatsUsed: 6,
+    },
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      companyName: "Epsilon Tech",
+      adminUserId: ADMIN_EPSILON,
+      adminEmail: "admin@epsilon.com",
+      adminName: "Admin Epsilon",
+      subscriptionPlanId: plans.find((p) => p.slug === "starter")?._id ?? null,
+      seatLimit: 10,
+      seatsUsed: 6,
+    },
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      companyName: "Zeta Corp",
+      adminUserId: ADMIN_ZETA,
+      adminEmail: "admin@zeta.com",
+      adminName: "Admin Zeta",
+      subscriptionPlanId: plans.find((p) => p.slug === "growth")?._id ?? null,
+      seatLimit: 20,
+      seatsUsed: 6,
+    },
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      companyName: "Eta Industries",
+      adminUserId: ADMIN_ETA,
+      adminEmail: "admin@eta.com",
+      adminName: "Admin Eta",
+      subscriptionPlanId: plans.find((p) => p.slug === "business")?._id ?? null,
+      seatLimit: 50,
+      seatsUsed: 6,
+    },
+  ]);
+  console.log(`  âœ“ Created ${companyAdmins.length} company admins`);
+
+  /* ================================================================ */
+  /*  CANDIDATE PLANS â€” 9 (3 tiers Ã— 3 companies)                     */
+  /* ================================================================ */
+  const PLAN_IDS = Array.from({ length: 9 }, () => oid());
+
+  const candidatePlans = await CandidatePlan.insertMany([
+    // â”€â”€ Gamma Workforce plans â”€â”€
+    {
+      _id: PLAN_IDS[0],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      planName: "Basic Candidate Access",
+      tier: "basic",
+      price: 29,
+      currency: "USD",
+      billingCycle: "monthly",
+      features: ["Profile visibility", "Job alerts", "Basic support"],
+      isActive: true,
+    },
+    {
+      _id: PLAN_IDS[1],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      planName: "Standard Candidate Access",
+      tier: "standard",
+      price: 49,
+      currency: "USD",
+      billingCycle: "monthly",
+      features: [
+        "Profile visibility",
+        "Job alerts",
+        "Priority support",
+        "Resume review",
+        "Interview prep",
+      ],
+      isActive: true,
+    },
+    {
+      _id: PLAN_IDS[2],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      planName: "Premium Candidate Access",
+      tier: "premium",
+      price: 99,
+      currency: "USD",
+      billingCycle: "monthly",
+      features: [
+        "Profile visibility",
+        "Job alerts",
+        "Dedicated support",
+        "Resume review",
+        "Interview prep",
+        "Career coaching",
+        "Salary negotiation",
+      ],
+      isActive: true,
+    },
+    // â”€â”€ Alpha Staffing plans â”€â”€
+    {
+      _id: PLAN_IDS[3],
+      companyId: COMPANY_ID.toString(),
+      planName: "Basic Candidate Access",
+      tier: "basic",
+      price: 25,
+      currency: "USD",
+      billingCycle: "monthly",
+      features: ["Profile visibility", "Job alerts"],
+      isActive: true,
+    },
+    {
+      _id: PLAN_IDS[4],
+      companyId: COMPANY_ID.toString(),
+      planName: "Standard Candidate Access",
+      tier: "standard",
+      price: 45,
+      currency: "USD",
+      billingCycle: "monthly",
+      features: [
+        "Profile visibility",
+        "Job alerts",
+        "Priority support",
+        "Resume review",
+      ],
+      isActive: true,
+    },
+    {
+      _id: PLAN_IDS[5],
+      companyId: COMPANY_ID.toString(),
+      planName: "Premium Candidate Access",
+      tier: "premium",
+      price: 89,
+      currency: "USD",
+      billingCycle: "yearly",
+      features: [
+        "Profile visibility",
+        "Job alerts",
+        "Dedicated support",
+        "Resume review",
+        "Interview prep",
+        "Career coaching",
+      ],
+      isActive: true,
+    },
+    // â”€â”€ Beta Tech plans â”€â”€
+    {
+      _id: PLAN_IDS[6],
+      companyId: COMPANY2_ID.toString(),
+      planName: "Basic Candidate Access",
+      tier: "basic",
+      price: 19,
+      currency: "USD",
+      billingCycle: "one-time",
+      features: ["Profile visibility"],
+      isActive: true,
+    },
+    {
+      _id: PLAN_IDS[7],
+      companyId: COMPANY2_ID.toString(),
+      planName: "Standard Candidate Access",
+      tier: "standard",
+      price: 39,
+      currency: "USD",
+      billingCycle: "monthly",
+      features: ["Profile visibility", "Job alerts", "Basic support"],
+      isActive: true,
+    },
+    {
+      _id: PLAN_IDS[8],
+      companyId: COMPANY2_ID.toString(),
+      planName: "Premium Candidate Access",
+      tier: "premium",
+      price: 79,
+      currency: "USD",
+      billingCycle: "yearly",
+      features: [
+        "Profile visibility",
+        "Job alerts",
+        "Dedicated support",
+        "Resume review",
+      ],
+      isActive: false,
+    },
+  ]);
+  console.log(`  âœ“ Created ${candidatePlans.length} candidate plans`);
+
+  /* ================================================================ */
+  /*  COMPANY USERS â€” 10 (employees across 3 companies)                */
+  /* ================================================================ */
+  const EU1 = "euser001-0001-0001-0001-euser0010001";
+  const EU2 = "euser002-0002-0002-0002-euser0020002";
+  const EU3 = "euser003-0003-0003-0003-euser0030003";
+  const EU4 = "euser004-0004-0004-0004-euser0040004";
+  const EU5 = "euser005-0005-0005-0005-euser0050005";
+  const EU6 = "euser006-0006-0006-0006-euser0060006";
+  const EU7 = "euser007-0007-0007-0007-euser0070007";
+  const EU8 = "euser008-0008-0008-0008-euser0080008";
+  const EU9 = "euser009-0009-0009-0009-euser0090009";
+  const EU10 = "euser010-0010-0010-0010-euser0100010";
+
+  const companyUsers = await CompanyUser.insertMany([
+    // â”€â”€ Gamma Workforce employees (5) â”€â”€
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      userId: ADMIN_EMPLOYER,
+      workerId: "WKR-0001",
+      email: "admin@employer.com",
+      fullName: "Admin Employer",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-90),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      userId: EU1,
+      workerId: "WKR-0002",
+      email: "sarah.chen@gammaworkforce.com",
+      fullName: "Sarah Chen",
+      role: "manager",
+      permissions: [
+        "dashboard",
+        "job_postings",
+        "hiring_firing",
+        "candidates",
+        "workers",
+        "finance",
+        "immigration",
+        "projects",
+        "staffing",
+        "placement",
+        "invite_workers",
+      ],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-60),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      userId: EU2,
+      workerId: "WKR-0003",
+      email: "mike.ross@gammaworkforce.com",
+      fullName: "Mike Ross",
+      role: "vendor",
+      permissions: ["dashboard", "job_postings", "hiring_firing", "candidates"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-3),
+      lastActiveAt: daysFromNow(-3),
+      joinedAt: daysFromNow(-45),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      userId: EU3,
+      workerId: "WKR-0004",
+      email: "lisa.park@gammaworkforce.com",
+      fullName: "Lisa Park",
+      role: "marketer",
+      department: "accounts",
+      permissions: [
+        "dashboard",
+        "candidates",
+        "workers",
+        "finance",
+        "projects",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-30),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      userId: EU4,
+      workerId: "WKR-0005",
+      email: "james.wilson@gammaworkforce.com",
+      fullName: "James Wilson",
+      role: "marketer",
+      department: "immigration",
+      permissions: ["dashboard", "candidates", "workers", "immigration"],
+      status: "deactivated",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-14),
+      lastActiveAt: daysFromNow(-14),
+      joinedAt: daysFromNow(-75),
+    },
+    // â”€â”€ Alpha Staffing employees (3) â”€â”€
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      userId: ADMIN_MARKETER,
+      workerId: "WKR-0006",
+      email: "admin@marketer.com",
+      fullName: "Admin Marketer",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-120),
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      userId: EU5,
+      workerId: "WKR-0007",
+      email: "priya.sharma@alphastaffing.com",
+      fullName: "Priya Sharma",
+      role: "manager",
+      permissions: [
+        "dashboard",
+        "job_postings",
+        "hiring_firing",
+        "candidates",
+        "workers",
+        "finance",
+        "immigration",
+        "projects",
+        "staffing",
+        "placement",
+        "invite_workers",
+      ],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-2),
+      lastActiveAt: daysFromNow(-2),
+      joinedAt: daysFromNow(-80),
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      userId: EU6,
+      workerId: "WKR-0008",
+      email: "david.kim@alphastaffing.com",
+      fullName: "David Kim",
+      role: "vendor",
+      permissions: ["dashboard", "job_postings", "hiring_firing", "candidates"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-5),
+      lastActiveAt: daysFromNow(-5),
+      joinedAt: daysFromNow(-40),
+    },
+    // â”€â”€ Beta Tech employees (2) â”€â”€
+    {
+      _id: oid(),
+      companyId: COMPANY2_ID.toString(),
+      userId: ADMIN_MARKETER2,
+      workerId: "WKR-0009",
+      email: "admin@markerter.com",
+      fullName: "Admin Marketer 2",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-100),
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY2_ID.toString(),
+      userId: EU7,
+      workerId: "WKR-0010",
+      email: "rachel.green@betatech.com",
+      fullName: "Rachel Green",
+      role: "marketer",
+      department: "placement",
+      permissions: [
+        "dashboard",
+        "candidates",
+        "workers",
+        "staffing",
+        "placement",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-55),
+    },
+
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Delta Solutions (Free plan) â€” all 6 roles
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      userId: ADMIN_DELTA,
+      workerId: "WKR-0011",
+      email: "admin@delta.com",
+      fullName: "Admin Delta",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-60),
+    },
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      userId: DE1,
+      workerId: "WKR-0012",
+      email: "manager@delta.com",
+      fullName: "Dana Manager",
+      role: "manager",
+      permissions: [
+        "dashboard",
+        "job_postings",
+        "hiring_firing",
+        "candidates",
+        "workers",
+        "projects",
+        "staffing",
+        "placement",
+      ],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-45),
+    },
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      userId: DE2,
+      workerId: "WKR-0013",
+      email: "vendor@delta.com",
+      fullName: "Derek Vendor",
+      role: "vendor",
+      permissions: ["dashboard", "job_postings", "hiring_firing"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-3),
+      lastActiveAt: daysFromNow(-3),
+      joinedAt: daysFromNow(-30),
+    },
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      userId: DE3,
+      workerId: "WKR-0014",
+      email: "accounts@delta.com",
+      fullName: "Donna Accounts",
+      role: "marketer",
+      department: "accounts",
+      permissions: [
+        "dashboard",
+        "finance",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-30),
+    },
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      userId: DE4,
+      workerId: "WKR-0015",
+      email: "immigration@delta.com",
+      fullName: "Dylan Immigration",
+      role: "marketer",
+      department: "immigration",
+      permissions: [
+        "dashboard",
+        "immigration",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-2),
+      lastActiveAt: daysFromNow(-2),
+      joinedAt: daysFromNow(-25),
+    },
+    {
+      _id: oid(),
+      companyId: DELTA_COMPANY_ID.toString(),
+      userId: DE5,
+      workerId: "WKR-0016",
+      email: "placement@delta.com",
+      fullName: "Diana Placement",
+      role: "marketer",
+      department: "placement",
+      permissions: ["dashboard", "staffing", "placement"],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-20),
+    },
+
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Epsilon Tech (Basic plan) â€” all 6 roles
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      userId: ADMIN_EPSILON,
+      workerId: "WKR-0017",
+      email: "admin@epsilon.com",
+      fullName: "Admin Epsilon",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-50),
+    },
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      userId: EE1,
+      workerId: "WKR-0018",
+      email: "manager@epsilon.com",
+      fullName: "Eva Manager",
+      role: "manager",
+      permissions: [
+        "dashboard",
+        "job_postings",
+        "hiring_firing",
+        "candidates",
+        "workers",
+        "projects",
+        "staffing",
+        "placement",
+      ],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-40),
+    },
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      userId: EE2,
+      workerId: "WKR-0019",
+      email: "vendor@epsilon.com",
+      fullName: "Ethan Vendor",
+      role: "vendor",
+      permissions: ["dashboard", "job_postings", "hiring_firing"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-4),
+      lastActiveAt: daysFromNow(-4),
+      joinedAt: daysFromNow(-35),
+    },
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      userId: EE3,
+      workerId: "WKR-0020",
+      email: "accounts@epsilon.com",
+      fullName: "Ellen Accounts",
+      role: "marketer",
+      department: "accounts",
+      permissions: [
+        "dashboard",
+        "finance",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-30),
+    },
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      userId: EE4,
+      workerId: "WKR-0021",
+      email: "immigration@epsilon.com",
+      fullName: "Erik Immigration",
+      role: "marketer",
+      department: "immigration",
+      permissions: [
+        "dashboard",
+        "immigration",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-2),
+      lastActiveAt: daysFromNow(-2),
+      joinedAt: daysFromNow(-25),
+    },
+    {
+      _id: oid(),
+      companyId: EPSILON_COMPANY_ID.toString(),
+      userId: EE5,
+      workerId: "WKR-0022",
+      email: "placement@epsilon.com",
+      fullName: "Elise Placement",
+      role: "marketer",
+      department: "placement",
+      permissions: ["dashboard", "staffing", "placement"],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-18),
+    },
+
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Zeta Corp (Pro plan) â€” all 6 roles
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      userId: ADMIN_ZETA,
+      workerId: "WKR-0023",
+      email: "admin@zeta.com",
+      fullName: "Admin Zeta",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-70),
+    },
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      userId: ZE1,
+      workerId: "WKR-0024",
+      email: "manager@zeta.com",
+      fullName: "Zara Manager",
+      role: "manager",
+      permissions: [
+        "dashboard",
+        "job_postings",
+        "hiring_firing",
+        "candidates",
+        "workers",
+        "projects",
+        "staffing",
+        "placement",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-55),
+    },
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      userId: ZE2,
+      workerId: "WKR-0025",
+      email: "vendor@zeta.com",
+      fullName: "Zach Vendor",
+      role: "vendor",
+      permissions: ["dashboard", "job_postings", "hiring_firing"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-2),
+      lastActiveAt: daysFromNow(-2),
+      joinedAt: daysFromNow(-40),
+    },
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      userId: ZE3,
+      workerId: "WKR-0026",
+      email: "accounts@zeta.com",
+      fullName: "Zoe Accounts",
+      role: "marketer",
+      department: "accounts",
+      permissions: [
+        "dashboard",
+        "finance",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-35),
+    },
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      userId: ZE4,
+      workerId: "WKR-0027",
+      email: "immigration@zeta.com",
+      fullName: "Zane Immigration",
+      role: "marketer",
+      department: "immigration",
+      permissions: [
+        "dashboard",
+        "immigration",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-30),
+    },
+    {
+      _id: oid(),
+      companyId: ZETA_COMPANY_ID.toString(),
+      userId: ZE5,
+      workerId: "WKR-0028",
+      email: "placement@zeta.com",
+      fullName: "Zelda Placement",
+      role: "marketer",
+      department: "placement",
+      permissions: ["dashboard", "staffing", "placement"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-3),
+      lastActiveAt: daysFromNow(-3),
+      joinedAt: daysFromNow(-25),
+    },
+
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Eta Industries (Pro Plus plan) â€” all 6 roles
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      userId: ADMIN_ETA,
+      workerId: "WKR-0029",
+      email: "admin@eta.com",
+      fullName: "Admin Eta",
+      role: "admin",
+      permissions: ["all"],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-90),
+    },
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      userId: HE1,
+      workerId: "WKR-0030",
+      email: "manager@eta.com",
+      fullName: "Hannah Manager",
+      role: "manager",
+      permissions: [
+        "dashboard",
+        "job_postings",
+        "hiring_firing",
+        "candidates",
+        "workers",
+        "projects",
+        "staffing",
+        "placement",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-75),
+    },
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      userId: HE2,
+      workerId: "WKR-0031",
+      email: "vendor@eta.com",
+      fullName: "Henry Vendor",
+      role: "vendor",
+      permissions: ["dashboard", "job_postings", "hiring_firing"],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-60),
+    },
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      userId: HE3,
+      workerId: "WKR-0032",
+      email: "accounts@eta.com",
+      fullName: "Hazel Accounts",
+      role: "marketer",
+      department: "accounts",
+      permissions: [
+        "dashboard",
+        "finance",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "online",
+      lastLoginAt: new Date(),
+      lastActiveAt: new Date(),
+      joinedAt: daysFromNow(-50),
+    },
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      userId: HE4,
+      workerId: "WKR-0033",
+      email: "immigration@eta.com",
+      fullName: "Hugo Immigration",
+      role: "marketer",
+      department: "immigration",
+      permissions: [
+        "dashboard",
+        "immigration",
+        "candidates",
+        "projects",
+        "staffing",
+      ],
+      status: "active",
+      onlineStatus: "away",
+      lastLoginAt: daysFromNow(-1),
+      lastActiveAt: daysFromNow(-1),
+      joinedAt: daysFromNow(-40),
+    },
+    {
+      _id: oid(),
+      companyId: ETA_COMPANY_ID.toString(),
+      userId: HE5,
+      workerId: "WKR-0034",
+      email: "placement@eta.com",
+      fullName: "Helena Placement",
+      role: "marketer",
+      department: "placement",
+      permissions: ["dashboard", "staffing", "placement"],
+      status: "active",
+      onlineStatus: "offline",
+      lastLoginAt: daysFromNow(-2),
+      lastActiveAt: daysFromNow(-2),
+      joinedAt: daysFromNow(-30),
+    },
+  ]);
+  console.log(`  âœ“ Created ${companyUsers.length} company users`);
+
+  /* ================================================================ */
+  /*  EMPLOYEE INVITATIONS â€” 10                                        */
+  /* ================================================================ */
+  const employeeInvitations = await EmployeeInvitation.insertMany([
+    // â”€â”€ Gamma Workforce invitations (5) â”€â”€
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_EMPLOYER,
+      inviteeEmail: "sarah.chen@gammaworkforce.com",
+      inviteeName: "Sarah Chen",
+      assignedRole: "manager",
+      token: "emp-inv-token-001",
+      status: "accepted",
+      expiresAt: daysFromNow(-28),
+      usedAt: daysFromNow(-60),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_EMPLOYER,
+      inviteeEmail: "mike.ross@gammaworkforce.com",
+      inviteeName: "Mike Ross",
+      assignedRole: "vendor",
+      token: "emp-inv-token-002",
+      status: "accepted",
+      expiresAt: daysFromNow(-13),
+      usedAt: daysFromNow(-45),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_EMPLOYER,
+      inviteeEmail: "new.hire@gammaworkforce.com",
+      inviteeName: "New Hire",
+      assignedRole: "vendor",
+      token: "emp-inv-token-003",
+      status: "pending",
+      expiresAt: daysFromNow(2),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_EMPLOYER,
+      inviteeEmail: "old.invite@gammaworkforce.com",
+      inviteeName: "Old Invite",
+      assignedRole: "marketer",
+      assignedDepartment: "accounts",
+      token: "emp-inv-token-004",
+      status: "expired",
+      expiresAt: daysFromNow(-10),
+    },
+    {
+      _id: oid(),
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_EMPLOYER,
+      inviteeEmail: "revoked.person@gammaworkforce.com",
+      inviteeName: "Revoked Person",
+      assignedRole: "marketer",
+      assignedDepartment: "immigration",
+      token: "emp-inv-token-005",
+      status: "revoked",
+      expiresAt: daysFromNow(1),
+    },
+    // â”€â”€ Alpha Staffing invitations (3) â”€â”€
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_MARKETER,
+      inviteeEmail: "priya.sharma@alphastaffing.com",
+      inviteeName: "Priya Sharma",
+      assignedRole: "manager",
+      token: "emp-inv-token-006",
+      status: "accepted",
+      expiresAt: daysFromNow(-48),
+      usedAt: daysFromNow(-80),
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_MARKETER,
+      inviteeEmail: "pending.alpha@alphastaffing.com",
+      inviteeName: "Pending Alpha",
+      assignedRole: "vendor",
+      token: "emp-inv-token-007",
+      status: "pending",
+      expiresAt: daysFromNow(1),
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY_ID.toString(),
+      invitedByAdminId: ADMIN_MARKETER,
+      inviteeEmail: "expired.alpha@alphastaffing.com",
+      inviteeName: "Expired Alpha",
+      assignedRole: "vendor",
+      token: "emp-inv-token-008",
+      status: "expired",
+      expiresAt: daysFromNow(-5),
+    },
+    // â”€â”€ Beta Tech invitations (2) â”€â”€
+    {
+      _id: oid(),
+      companyId: COMPANY2_ID.toString(),
+      invitedByAdminId: ADMIN_MARKETER2,
+      inviteeEmail: "rachel.green@betatech.com",
+      inviteeName: "Rachel Green",
+      assignedRole: "marketer",
+      assignedDepartment: "placement",
+      token: "emp-inv-token-009",
+      status: "accepted",
+      expiresAt: daysFromNow(-23),
+      usedAt: daysFromNow(-55),
+    },
+    {
+      _id: oid(),
+      companyId: COMPANY2_ID.toString(),
+      invitedByAdminId: ADMIN_MARKETER2,
+      inviteeEmail: "pending.beta@betatech.com",
+      inviteeName: "Pending Beta",
+      assignedRole: "manager",
+      token: "emp-inv-token-010",
+      status: "pending",
+      expiresAt: daysFromNow(2),
+    },
+  ]);
+  console.log(
+    `  âœ“ Created ${employeeInvitations.length} employee invitations`,
+  );
+
+  /* ================================================================ */
+  /*  CANDIDATE INVITATIONS â€” 15 (the key "Candidate Tracking" data)   */
+  /* ================================================================ */
+  const CINV_IDS = Array.from({ length: 15 }, () => oid());
+
+  const candidateInvitations = await CandidateInvitation.insertMany([
+    // â”€â”€ Gamma Workforce candidate invitations (10) â”€â”€
+    {
+      _id: CINV_IDS[0],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "Raj Patel",
+      candidateEmail: "raj.patel@test.com",
+      candidatePlan: PLAN_IDS[1].toString(),
+      candidatePlanName: "Standard Candidate Access",
+      jobTitle: "Senior React Developer",
+      personalNote: "Great fit for our frontend team",
+      token: "cand-inv-token-001",
+      tokenExpiresAt: daysFromNow(3),
+      status: "active",
+      paymentStatus: "paid",
+      registeredAt: daysFromNow(-5),
+      paidAt: daysFromNow(-5),
+    },
+    {
+      _id: CINV_IDS[1],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "Maria Garcia",
+      candidateEmail: "maria.garcia@test.com",
+      candidatePlan: PLAN_IDS[2].toString(),
+      candidatePlanName: "Premium Candidate Access",
+      jobTitle: "DevOps Lead",
+      personalNote: "Excellent AWS experience",
+      token: "cand-inv-token-002",
+      tokenExpiresAt: daysFromNow(3),
+      status: "active",
+      paymentStatus: "paid",
+      registeredAt: daysFromNow(-3),
+      paidAt: daysFromNow(-3),
+    },
+    {
+      _id: CINV_IDS[2],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "David Nguyen",
+      candidateEmail: "david.nguyen@test.com",
+      candidatePlan: PLAN_IDS[0].toString(),
+      candidatePlanName: "Basic Candidate Access",
+      jobTitle: "Full Stack Engineer",
+      token: "cand-inv-token-003",
+      tokenExpiresAt: daysFromNow(3),
+      status: "pending",
+      paymentStatus: "unpaid",
+    },
+    {
+      _id: CINV_IDS[3],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: EU1,
+      invitedByName: "Sarah Chen",
+      invitedByRole: "admin",
+      candidateName: "Emily Watson",
+      candidateEmail: "emily.watson@test.com",
+      candidatePlan: PLAN_IDS[1].toString(),
+      candidatePlanName: "Standard Candidate Access",
+      jobTitle: "QA Automation Engineer",
+      personalNote: "Strong Selenium + Cypress background",
+      token: "cand-inv-token-004",
+      tokenExpiresAt: daysFromNow(2),
+      status: "payment_pending",
+      paymentStatus: "unpaid",
+      registeredAt: daysFromNow(-1),
+    },
+    {
+      _id: CINV_IDS[4],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "Chris Jordan",
+      candidateEmail: "chris.jordan@test.com",
+      candidatePlan: PLAN_IDS[2].toString(),
+      candidatePlanName: "Premium Candidate Access",
+      jobTitle: "Platform Architect",
+      token: "cand-inv-token-005",
+      tokenExpiresAt: daysFromNow(-5),
+      status: "expired",
+      paymentStatus: "unpaid",
+    },
+    {
+      _id: CINV_IDS[5],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "Ana Lopez",
+      candidateEmail: "ana.lopez@test.com",
+      candidatePlan: PLAN_IDS[0].toString(),
+      candidatePlanName: "Basic Candidate Access",
+      jobTitle: "Data Analyst",
+      token: "cand-inv-token-006",
+      tokenExpiresAt: daysFromNow(1),
+      status: "revoked",
+      paymentStatus: "refunded",
+    },
+    {
+      _id: CINV_IDS[6],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: EU1,
+      invitedByName: "Sarah Chen",
+      invitedByRole: "admin",
+      candidateName: "Kevin Zhang",
+      candidateEmail: "kevin.zhang@test.com",
+      candidatePlan: PLAN_IDS[1].toString(),
+      candidatePlanName: "Standard Candidate Access",
+      jobTitle: "Backend Engineer",
+      personalNote: "Node.js specialist, great references",
+      token: "cand-inv-token-007",
+      tokenExpiresAt: daysFromNow(3),
+      status: "active",
+      paymentStatus: "paid",
+      registeredAt: daysFromNow(-7),
+      paidAt: daysFromNow(-7),
+    },
+    {
+      _id: CINV_IDS[7],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "Sophia Reed",
+      candidateEmail: "sophia.reed@test.com",
+      candidatePlan: PLAN_IDS[2].toString(),
+      candidatePlanName: "Premium Candidate Access",
+      jobTitle: "ML Engineer",
+      token: "cand-inv-token-008",
+      tokenExpiresAt: daysFromNow(2),
+      status: "payment_pending",
+      paymentStatus: "failed",
+    },
+    {
+      _id: CINV_IDS[8],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: ADMIN_EMPLOYER,
+      invitedByName: "Admin Employer",
+      invitedByRole: "admin",
+      candidateName: "Tom Bradley",
+      candidateEmail: "tom.bradley@test.com",
+      candidatePlan: PLAN_IDS[0].toString(),
+      candidatePlanName: "Basic Candidate Access",
+      jobTitle: "Junior Developer",
+      personalNote: "Fresh grad with strong potential",
+      token: "cand-inv-token-009",
+      tokenExpiresAt: daysFromNow(3),
+      status: "pending",
+      paymentStatus: "unpaid",
+    },
+    {
+      _id: CINV_IDS[9],
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      companyName: "Gamma Workforce",
+      invitedByUserId: EU3,
+      invitedByName: "Lisa Park",
+      invitedByRole: "admin",
+      candidateName: "Nadia Volkov",
+      candidateEmail: "nadia.volkov@test.com",
+      candidatePlan: PLAN_IDS[1].toString(),
+      candidatePlanName: "Standard Candidate Access",
+      jobTitle: "Site Reliability Engineer",
+      token: "cand-inv-token-010",
+      tokenExpiresAt: daysFromNow(3),
+      status: "active",
+      paymentStatus: "paid",
+      registeredAt: daysFromNow(-2),
+      paidAt: daysFromNow(-2),
+    },
+    // â”€â”€ Alpha Staffing candidate invitations (3) â”€â”€
+    {
+      _id: CINV_IDS[10],
+      companyId: COMPANY_ID.toString(),
+      companyName: "Alpha Staffing Solutions",
+      invitedByUserId: ADMIN_MARKETER,
+      invitedByName: "Admin Marketer",
+      invitedByRole: "admin",
+      candidateName: "Hassan Ali",
+      candidateEmail: "hassan.ali@test.com",
+      candidatePlan: PLAN_IDS[4].toString(),
+      candidatePlanName: "Standard Candidate Access",
+      jobTitle: "Cloud Engineer",
+      token: "cand-inv-token-011",
+      tokenExpiresAt: daysFromNow(3),
+      status: "active",
+      paymentStatus: "paid",
+      registeredAt: daysFromNow(-10),
+      paidAt: daysFromNow(-10),
+    },
+    {
+      _id: CINV_IDS[11],
+      companyId: COMPANY_ID.toString(),
+      companyName: "Alpha Staffing Solutions",
+      invitedByUserId: EU5,
+      invitedByName: "Priya Sharma",
+      invitedByRole: "admin",
+      candidateName: "Olivia Turner",
+      candidateEmail: "olivia.turner@test.com",
+      candidatePlan: PLAN_IDS[3].toString(),
+      candidatePlanName: "Basic Candidate Access",
+      jobTitle: "Technical Writer",
+      token: "cand-inv-token-012",
+      tokenExpiresAt: daysFromNow(2),
+      status: "pending",
+      paymentStatus: "unpaid",
+    },
+    {
+      _id: CINV_IDS[12],
+      companyId: COMPANY_ID.toString(),
+      companyName: "Alpha Staffing Solutions",
+      invitedByUserId: ADMIN_MARKETER,
+      invitedByName: "Admin Marketer",
+      invitedByRole: "admin",
+      candidateName: "Jake Morrison",
+      candidateEmail: "jake.morrison@test.com",
+      candidatePlan: PLAN_IDS[5].toString(),
+      candidatePlanName: "Premium Candidate Access",
+      jobTitle: "Security Analyst",
+      token: "cand-inv-token-013",
+      tokenExpiresAt: daysFromNow(-3),
+      status: "expired",
+      paymentStatus: "unpaid",
+    },
+    // â”€â”€ Beta Tech candidate invitations (2) â”€â”€
+    {
+      _id: CINV_IDS[13],
+      companyId: COMPANY2_ID.toString(),
+      companyName: "Beta Tech Partners",
+      invitedByUserId: ADMIN_MARKETER2,
+      invitedByName: "Admin Marketer 2",
+      invitedByRole: "admin",
+      candidateName: "Yuki Sato",
+      candidateEmail: "yuki.sato@test.com",
+      candidatePlan: PLAN_IDS[7].toString(),
+      candidatePlanName: "Standard Candidate Access",
+      jobTitle: "Mobile Developer",
+      token: "cand-inv-token-014",
+      tokenExpiresAt: daysFromNow(3),
+      status: "active",
+      paymentStatus: "paid",
+      registeredAt: daysFromNow(-4),
+      paidAt: daysFromNow(-4),
+    },
+    {
+      _id: CINV_IDS[14],
+      companyId: COMPANY2_ID.toString(),
+      companyName: "Beta Tech Partners",
+      invitedByUserId: ADMIN_MARKETER2,
+      invitedByName: "Admin Marketer 2",
+      invitedByRole: "admin",
+      candidateName: "Leo Fernandez",
+      candidateEmail: "leo.fernandez@test.com",
+      candidatePlan: PLAN_IDS[6].toString(),
+      candidatePlanName: "Basic Candidate Access",
+      jobTitle: "Systems Administrator",
+      token: "cand-inv-token-015",
+      tokenExpiresAt: daysFromNow(1),
+      status: "payment_pending",
+      paymentStatus: "unpaid",
+      registeredAt: daysFromNow(-1),
+    },
+  ]);
+  console.log(
+    `  âœ“ Created ${candidateInvitations.length} candidate invitations`,
+  );
+
+  /* ================================================================ */
+  /*  CANDIDATE USERS â€” 7 (registered from active invitations)         */
+  /* ================================================================ */
+  const candidateUsers = await CandidateUser.insertMany([
+    // â”€â”€ Gamma Workforce registered candidates (4) â”€â”€
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitationId: CINV_IDS[0].toString(),
+      fullName: "Raj Patel",
+      email: "raj.patel@test.com",
+      phone: "+1-555-0201",
+      candidatePlan: PLAN_IDS[1].toString(),
+      paymentStatus: "paid",
+      status: "active",
+      activatedAt: daysFromNow(-5),
+      lastLoginAt: daysFromNow(-1),
+    },
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitationId: CINV_IDS[1].toString(),
+      fullName: "Maria Garcia",
+      email: "maria.garcia@test.com",
+      phone: "+1-555-0202",
+      candidatePlan: PLAN_IDS[2].toString(),
+      paymentStatus: "paid",
+      status: "active",
+      activatedAt: daysFromNow(-3),
+      lastLoginAt: new Date(),
+    },
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitationId: CINV_IDS[6].toString(),
+      fullName: "Kevin Zhang",
+      email: "kevin.zhang@test.com",
+      phone: "+1-555-0203",
+      candidatePlan: PLAN_IDS[1].toString(),
+      paymentStatus: "paid",
+      status: "active",
+      activatedAt: daysFromNow(-7),
+      lastLoginAt: daysFromNow(-2),
+    },
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitationId: CINV_IDS[9].toString(),
+      fullName: "Nadia Volkov",
+      email: "nadia.volkov@test.com",
+      candidatePlan: PLAN_IDS[1].toString(),
+      paymentStatus: "paid",
+      status: "active",
+      activatedAt: daysFromNow(-2),
+      lastLoginAt: daysFromNow(-1),
+    },
+    // â”€â”€ Alpha Staffing registered candidates (2) â”€â”€
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: COMPANY_ID.toString(),
+      invitationId: CINV_IDS[10].toString(),
+      fullName: "Hassan Ali",
+      email: "hassan.ali@test.com",
+      phone: "+1-555-0205",
+      candidatePlan: PLAN_IDS[4].toString(),
+      paymentStatus: "paid",
+      status: "active",
+      activatedAt: daysFromNow(-10),
+      lastLoginAt: daysFromNow(-3),
+    },
+    // â”€â”€ Beta Tech registered candidate (1) â”€â”€
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: COMPANY2_ID.toString(),
+      invitationId: CINV_IDS[13].toString(),
+      fullName: "Yuki Sato",
+      email: "yuki.sato@test.com",
+      candidatePlan: PLAN_IDS[7].toString(),
+      paymentStatus: "paid",
+      status: "active",
+      activatedAt: daysFromNow(-4),
+      lastLoginAt: daysFromNow(-1),
+    },
+    // â”€â”€ Pending candidate (payment_pending invitation) â”€â”€
+    {
+      _id: oid(),
+      userType: "candidate",
+      companyId: EMPLOYER_COMPANY_ID.toString(),
+      invitationId: CINV_IDS[3].toString(),
+      fullName: "Emily Watson",
+      email: "emily.watson@test.com",
+      candidatePlan: PLAN_IDS[1].toString(),
+      paymentStatus: "unpaid",
+      status: "pending",
+      lastLoginAt: daysFromNow(-1),
+    },
+  ]);
+  console.log(`  âœ“ Created ${candidateUsers.length} candidate users`);
+
+  /* ================================================================ */
+  /*  COUNTERS â€” initialize sequences for display IDs                  */
+  /* ================================================================ */
+  await Counter.insertMany([
+    { _id: "candidate", seq: 20 }, // 20 profiles seeded (CND-0001..CND-0020)
+    { _id: "worker", seq: 34 }, // 34 company users seeded (WKR-0001..WKR-0034)
+    { _id: "company", seq: 7 }, // 7 companies seeded (CMP-0001..CMP-0007)
+  ]);
+  console.log("  âœ“ Initialized counter sequences");
 
   /* ================================================================ */
   /*  Summary                                                          */
   /* ================================================================ */
-  console.log("\n✅ Jobs database seeded successfully!");
+  console.log("\nâœ… Jobs database seeded successfully!");
   console.log(
     `   ${jobs.length} jobs, ${profiles.length} profiles, ${applications.length} applications`,
   );
@@ -2432,7 +5732,16 @@ async function seed() {
     `   ${forwarded.length} forwarded openings, ${invites.length} company invites`,
   );
   console.log(
-    `   ${financials.length} project financials, ${timesheets.length} timesheets, ${interviews.length} interviews\n`,
+    `   ${financials.length} project financials, ${timesheets.length} timesheets, ${interviews.length} interviews`,
+  );
+  console.log(
+    `   ${companyAdmins.length} company admins, ${candidatePlans.length} candidate plans`,
+  );
+  console.log(
+    `   ${companyUsers.length} company users, ${employeeInvitations.length} employee invitations`,
+  );
+  console.log(
+    `   ${candidateInvitations.length} candidate invitations, ${candidateUsers.length} candidate users\n`,
   );
 
   await disconnectMongo();

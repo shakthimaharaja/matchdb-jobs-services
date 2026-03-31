@@ -1,63 +1,96 @@
 import mongoose, { Schema } from "mongoose";
 
-export type UserRole =
-  | "admin"
-  | "finance"
-  | "hr"
-  | "operations"
-  | "marketing"
-  | "viewer";
-export type UserStatus = "active" | "inactive" | "suspended";
+export type UserRole = "admin" | "manager" | "vendor" | "marketer";
+export type MarketerDepartment = "accounts" | "immigration" | "placement";
+export type UserStatus = "active" | "invited" | "deactivated";
 
 /**
- * Predefined permissions per role.
- * The admin role implicitly has ALL permissions.
+ * Permission constants — used in RBAC middleware and frontend guards.
  */
-export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: [
-    "users:manage",
-    "users:view",
-    "invite:employee",
-    "invite:candidate",
-    "finance:view",
-    "finance:manage",
-    "hr:view",
-    "hr:manage",
-    "operations:view",
-    "operations:manage",
-    "reports:view",
-    "settings:manage",
-    "candidates:view",
-    "candidates:manage",
+export const PERMISSIONS = {
+  DASHBOARD: "dashboard",
+  JOB_POSTINGS: "job_postings",
+  HIRING_FIRING: "hiring_firing",
+  CANDIDATES: "candidates",
+  WORKERS: "workers",
+  FINANCE: "finance",
+  IMMIGRATION: "immigration",
+  PROJECTS: "projects",
+  STAFFING: "staffing",
+  PLACEMENT: "placement",
+  SUBSCRIPTION: "subscription",
+  INVITE_WORKERS: "invite_workers",
+  MANAGE_ROLES: "manage_roles",
+  COMPANY_SETTINGS: "company_settings",
+} as const;
+
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+/**
+ * Role → permissions mapping.
+ * MARKETER is further scoped by department; the key is `marketer_<department>`.
+ */
+export const ROLE_PERMISSIONS: Record<string, string[]> = {
+  admin: Object.values(PERMISSIONS),
+
+  manager: [
+    "dashboard",
+    "job_postings",
+    "hiring_firing",
+    "candidates",
+    "workers",
+    "projects",
+    "staffing",
+    "placement",
   ],
-  finance: ["finance:view", "finance:manage", "reports:view"],
-  hr: ["hr:view", "hr:manage", "reports:view"],
-  operations: ["operations:view", "operations:manage", "reports:view"],
-  marketing: [
-    "invite:candidate",
-    "candidates:view",
-    "candidates:manage",
-    "reports:view",
+
+  vendor: ["dashboard", "job_postings", "hiring_firing"],
+
+  marketer_accounts: [
+    "dashboard",
+    "finance",
+    "candidates",
+    "projects",
+    "staffing",
   ],
-  viewer: [
-    "finance:view",
-    "hr:view",
-    "operations:view",
-    "reports:view",
-    "candidates:view",
+
+  marketer_immigration: [
+    "dashboard",
+    "immigration",
+    "candidates",
+    "projects",
+    "staffing",
   ],
+
+  marketer_placement: ["dashboard", "staffing", "placement"],
 };
+
+/**
+ * Resolve the permission-key for a given role + optional department.
+ */
+export function resolveRoleKey(
+  role: UserRole,
+  department?: string | null,
+): string {
+  if (role === "marketer" && department) return `marketer_${department}`;
+  return role;
+}
 
 export interface ICompanyUser {
   _id: string;
   companyId: string;
   userId: string; // references shell User._id
+  workerId: string; // e.g. "WKR-0001" — human-readable unique worker ID
   email: string;
   fullName: string;
+  phone: string;
+  designation: string;
   role: UserRole;
+  department: MarketerDepartment | null; // only for role === "marketer"
   permissions: string[];
   status: UserStatus;
   invitationId: string | null;
+  invitedBy: string | null; // userId of the admin who invited
   lastLoginAt: Date | null;
   lastActiveAt: Date | null;
   onlineStatus: "online" | "away" | "offline";
@@ -74,20 +107,29 @@ const CompanyUserSchema = new Schema<ICompanyUser>(
     },
     companyId: { type: String, required: true },
     userId: { type: String, required: true },
+    workerId: { type: String, default: "", unique: true, sparse: true },
     email: { type: String, required: true },
     fullName: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    designation: { type: String, default: "" },
     role: {
       type: String,
-      enum: ["admin", "finance", "hr", "operations", "marketing", "viewer"],
-      default: "viewer",
+      enum: ["admin", "manager", "vendor", "marketer"],
+      default: "vendor",
+    },
+    department: {
+      type: String,
+      enum: ["accounts", "immigration", "placement", null],
+      default: null,
     },
     permissions: { type: [String], default: [] },
     status: {
       type: String,
-      enum: ["active", "inactive", "suspended"],
+      enum: ["active", "invited", "deactivated"],
       default: "active",
     },
     invitationId: { type: String, default: null },
+    invitedBy: { type: String, default: null },
     lastLoginAt: { type: Date, default: null },
     lastActiveAt: { type: Date, default: null },
     onlineStatus: {

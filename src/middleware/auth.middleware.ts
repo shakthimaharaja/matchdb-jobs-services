@@ -1,11 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { env } from "../config/env";
 
 export interface JwtUser {
   userId: string;
   email: string;
-  userType: 'candidate' | 'vendor' | 'admin' | 'marketer';
+  userType: "candidate" | "employer" | "admin";
   plan: string;
   username: string;
 }
@@ -18,10 +18,14 @@ declare global {
   }
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Authentication required' });
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Authentication required" });
     return;
   }
 
@@ -30,36 +34,38 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     req.user = jwt.verify(token, env.JWT_SECRET) as JwtUser;
     next();
   } catch {
-    res.status(401).json({ error: 'Invalid or expired token' });
+    res.status(401).json({ error: "Invalid or expired token" });
   }
 }
 
-export function requireVendor(req: Request, res: Response, next: NextFunction): void {
+export function requireEmployer(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   requireAuth(req, res, () => {
-    if (req.user?.userType !== 'vendor') {
-      res.status(403).json({ error: 'Vendor access required' });
+    if (req.user?.userType !== "employer") {
+      res.status(403).json({ error: "Employer access required" });
       return;
     }
     next();
   });
 }
 
-export function requireCandidate(req: Request, res: Response, next: NextFunction): void {
+export function requireCandidate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   requireAuth(req, res, () => {
-    if (req.user?.userType !== 'candidate') {
-      res.status(403).json({ error: 'Candidate access required' });
+    if (req.user?.userType !== "candidate") {
+      res.status(403).json({ error: "Candidate access required" });
       return;
     }
     next();
   });
 }
 
-export function requireMarketer(req: Request, res: Response, next: NextFunction): void {
-  requireAuth(req, res, () => {
-    if (req.user?.userType !== 'marketer') {
-      res.status(403).json({ error: 'Marketer access required' });
-      return;
-    }
-    next();
-  });
-}
+// Legacy aliases — all check for employer userType
+export const requireVendor = requireEmployer;
+export const requireMarketer = requireEmployer;

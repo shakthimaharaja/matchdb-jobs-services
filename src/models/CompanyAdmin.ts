@@ -1,7 +1,9 @@
 import mongoose, { Schema } from "mongoose";
 
-export type SubscriptionPlan = "basic" | "pro";
-
+/**
+ * CompanyAdmin — tracks per-company admin configuration, seat usage,
+ * and references the active subscription plan.
+ */
 export interface ICompanyAdmin {
   _id: string;
   companyId: string;
@@ -9,17 +11,12 @@ export interface ICompanyAdmin {
   adminUserId: string;
   adminEmail: string;
   adminName: string;
-  subscriptionPlan: SubscriptionPlan;
+  subscriptionPlanId: string | null; // refs SubscriptionPlan._id
   seatLimit: number;
   seatsUsed: number;
   createdAt: Date;
   updatedAt: Date;
 }
-
-export const PLAN_SEAT_LIMITS: Record<SubscriptionPlan, number> = {
-  basic: 5,
-  pro: 10,
-};
 
 const CompanyAdminSchema = new Schema<ICompanyAdmin>(
   {
@@ -32,12 +29,8 @@ const CompanyAdminSchema = new Schema<ICompanyAdmin>(
     adminUserId: { type: String, required: true, unique: true },
     adminEmail: { type: String, required: true },
     adminName: { type: String, default: "" },
-    subscriptionPlan: {
-      type: String,
-      enum: ["basic", "pro"],
-      default: "basic",
-    },
-    seatLimit: { type: Number, default: PLAN_SEAT_LIMITS.basic },
+    subscriptionPlanId: { type: String, default: null },
+    seatLimit: { type: Number, default: 3 }, // starter default
     seatsUsed: { type: Number, default: 0 },
   },
   { timestamps: true },

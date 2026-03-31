@@ -5,7 +5,7 @@ import {
   Application,
   PokeRecord,
   Company,
-  MarketerCandidate,
+  EmployerCandidate,
   ForwardedOpening,
   CompanyInvite,
   ProjectFinancial,
@@ -15,13 +15,13 @@ import {
 import { sendPokeEmail } from "../services/sendgrid.service";
 import { toNum } from "../utils";
 
-// --- Marketer: Dashboard Stats ------------------------------------------------
+// --- Employer: Dashboard Stats ------------------------------------------------
 
 /**
- * GET /api/jobs/marketer/stats
- * Returns aggregate counts for the marketer dashboard stat chips.
+ * GET /api/jobs/employer/stats
+ * Returns aggregate counts for the employer dashboard stat chips.
  */
-export async function getMarketerStats(
+export async function getEmployerStats(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -54,15 +54,15 @@ export async function getMarketerStats(
 }
 
 /**
- * GET /api/jobs/marketer/jobs
+ * GET /api/jobs/employer/jobs
  * Returns paginated, searchable list of all active vendor job postings.
  *
  * Query params:
  *   page   (default 1)
  *   limit  (default 50, max 100)
- *   search (optional � matches title or skills)
+ *   search (optional Ã¯Â¿Â½ matches title or skills)
  */
-export async function getMarketerJobs(
+export async function getEmployerJobs(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -183,18 +183,18 @@ export async function getMarketerJobs(
   }
 }
 
-// --- Marketer: All Candidate Profiles ----------------------------------------
+// --- Employer: All Candidate Profiles ----------------------------------------
 
 /**
- * GET /api/jobs/marketer/profiles
+ * GET /api/jobs/employer/profiles
  * Returns paginated, searchable list of all candidate profiles.
  *
  * Query params:
  *   page   (default 1)
  *   limit  (default 50, max 100)
- *   search (optional � matches name, role, skills, or location)
+ *   search (optional Ã¯Â¿Â½ matches name, role, skills, or location)
  */
-export async function getMarketerProfiles(
+export async function getEmployerProfiles(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -289,7 +289,7 @@ export async function getMarketerProfiles(
 // --- Company Registration -----------------------------------------------------
 
 /**
- * POST /api/jobs/marketer/company
+ * POST /api/jobs/employer/company
  * Body: { name: string }
  * Creates (or returns existing) company for the logged-in employer.
  * In the new architecture, company creation goes through admin/setup.
@@ -332,7 +332,7 @@ export async function registerCompany(
       id: company._id,
       name: company.name,
       uid: company.adminUserId,
-      marketer_email: company.adminEmail,
+      employer_email: company.adminEmail,
       created_at: company.createdAt?.toISOString() ?? "",
     });
   } catch (err) {
@@ -341,7 +341,7 @@ export async function registerCompany(
 }
 
 /**
- * GET /api/jobs/marketer/company
+ * GET /api/jobs/employer/company
  * Returns the employer's company (if any).
  */
 export async function getMyCompany(
@@ -368,7 +368,7 @@ export async function getMyCompany(
       id: company._id,
       name: company.name,
       uid: company.adminUserId,
-      marketer_email: company.adminEmail,
+      employer_email: company.adminEmail,
       created_at: company.createdAt?.toISOString() ?? "",
     });
   } catch (err) {
@@ -380,7 +380,7 @@ export async function getMyCompany(
 
 /**
  * GET /api/jobs/companies
- * Returns all company names (no auth required � used in registration forms).
+ * Returns all company names (no auth required Ã¯Â¿Â½ used in registration forms).
  */
 export async function listCompanies(
   _req: Request,
@@ -401,10 +401,10 @@ export async function listCompanies(
 // --- Marketer Candidates (company roster) ------------------------------------
 
 /**
- * POST /api/jobs/marketer/candidates
+ * POST /api/jobs/employer/candidates
  * Body: { candidateName: string, candidateEmail: string }
  */
-export async function addMarketerCandidate(
+export async function addEmployerCandidate(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -420,7 +420,7 @@ export async function addMarketerCandidate(
     }
 
     const company = await Company.findOne({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
@@ -428,9 +428,9 @@ export async function addMarketerCandidate(
     }
 
     try {
-      const doc = await MarketerCandidate.create({
+      const doc = await EmployerCandidate.create({
         companyId: company._id,
-        marketerId: req.user!.userId,
+        employerId: req.user!.userId,
         candidateId: "",
         candidateName: (candidateName || "").trim(),
         candidateEmail: candidateEmail.trim().toLowerCase(),
@@ -458,24 +458,24 @@ export async function addMarketerCandidate(
 }
 
 /**
- * GET /api/jobs/marketer/candidates
+ * GET /api/jobs/employer/candidates
  * Returns all candidates in the marketer's company with poke/email counts.
  */
-export async function getMarketerCandidates(
+export async function getEmployerCandidates(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
     const company = await Company.findOne({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     if (!company) {
       res.json([]);
       return;
     }
 
-    const docs = await MarketerCandidate.find({ companyId: company._id })
+    const docs = await EmployerCandidate.find({ companyId: company._id })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -548,7 +548,7 @@ export async function getMarketerCandidates(
 }
 
 /**
- * GET /api/jobs/marketer/company-summary
+ * GET /api/jobs/employer/company-summary
  * Returns company-wide aggregated data for all candidates:
  *  - Per-candidate financial totals
  *  - All projects with financials, client info, start/end dates
@@ -561,7 +561,7 @@ export async function getCompanySummary(
 ): Promise<void> {
   try {
     const company = await Company.findOne({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     if (!company) {
       res.json({
@@ -583,7 +583,7 @@ export async function getCompanySummary(
     }
 
     // 1. All roster candidates
-    const roster = await MarketerCandidate.find({ companyId: company._id })
+    const roster = await EmployerCandidate.find({ companyId: company._id })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -601,7 +601,7 @@ export async function getCompanySummary(
 
     // 3. All financials for this marketer
     const allFinancials = await ProjectFinancial.find({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     const finByAppId = new Map(allFinancials.map((f) => [f.applicationId, f]));
 
@@ -685,7 +685,7 @@ export async function getCompanySummary(
         ct.hoursWorked += toNum(fin.hoursWorked);
       }
 
-      // Domain count — use job title or role
+      // Domain count Ã¢â‚¬â€ use job title or role
       const domain = prof?.currentRole || aJob?.title || "Unknown";
       domainMap[domain] = (domainMap[domain] || 0) + 1;
 
@@ -792,24 +792,24 @@ export async function getCompanySummary(
 }
 
 /**
- * GET /api/jobs/marketer/candidates/:id/detail
+ * GET /api/jobs/employer/candidates/:id/detail
  * Returns a QuickBooks-style detail view for a single company candidate.
  */
-export async function getMarketerCandidateDetail(
+export async function getEmployerCandidateDetail(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
     const company = await Company.findOne({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     if (!company) {
       res.status(400).json({ error: "No company registered" });
       return;
     }
 
-    const mc = await MarketerCandidate.findOne({
+    const mc = await EmployerCandidate.findOne({
       _id: req.params.id,
       companyId: company._id,
     }).lean();
@@ -844,7 +844,7 @@ export async function getMarketerCandidateDetail(
     // Get financials for this candidate under this marketer
     const financials = profile?.candidateId
       ? await ProjectFinancial.find({
-          marketerId: req.user!.userId,
+          employerId: req.user!.userId,
           candidateId: profile.candidateId,
         })
           .sort({ createdAt: -1 })
@@ -856,7 +856,7 @@ export async function getMarketerCandidateDetail(
 
     // Get forwarded openings for this candidate from this marketer
     const forwarded = await ForwardedOpening.find({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
       candidateEmail: mc.candidateEmail.toLowerCase(),
     })
       .sort({ createdAt: -1 })
@@ -976,17 +976,17 @@ export async function getMarketerCandidateDetail(
 }
 
 /**
- * DELETE /api/jobs/marketer/candidates/:id
+ * DELETE /api/jobs/employer/candidates/:id
  */
-export async function removeMarketerCandidate(
+export async function removeEmployerCandidate(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    await MarketerCandidate.deleteMany({
+    await EmployerCandidate.deleteMany({
       _id: req.params.id,
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -997,7 +997,7 @@ export async function removeMarketerCandidate(
 // --- Forward Opening to Candidate --------------------------------------------
 
 /**
- * POST /api/jobs/marketer/forward
+ * POST /api/jobs/employer/forward
  * Body: { candidateEmail: string, jobId: string, note?: string }
  */
 export async function forwardOpening(
@@ -1018,7 +1018,7 @@ export async function forwardOpening(
     }
 
     const company = await Company.findOne({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
@@ -1026,7 +1026,7 @@ export async function forwardOpening(
     }
 
     // Enforce: candidate MUST be in the marketer's company roster
-    const mc = await MarketerCandidate.findOne({
+    const mc = await EmployerCandidate.findOne({
       companyId: company._id,
       candidateEmail: candidateEmail.trim().toLowerCase(),
     }).lean();
@@ -1050,8 +1050,8 @@ export async function forwardOpening(
 
     try {
       const doc = await ForwardedOpening.create({
-        marketerId: req.user!.userId,
-        marketerEmail: req.user!.email,
+        employerId: req.user!.userId,
+        employerEmail: req.user!.email,
         companyId: company._id,
         companyName: company.name,
         candidateEmail: candidateEmail.trim().toLowerCase(),
@@ -1092,7 +1092,7 @@ export async function forwardOpening(
 }
 
 /**
- * GET /api/jobs/marketer/forwarded
+ * GET /api/jobs/employer/forwarded
  * Returns all forwarded openings from the marketer.
  */
 export async function getForwardedOpenings(
@@ -1101,7 +1101,7 @@ export async function getForwardedOpenings(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const docs = await ForwardedOpening.find({ marketerId: req.user!.userId })
+    const docs = await ForwardedOpening.find({ employerId: req.user!.userId })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -1151,7 +1151,7 @@ export async function getCandidateForwardedOpenings(
     res.json(
       docs.map((d) => ({
         id: d._id,
-        marketer_email: d.marketerEmail,
+        employer_email: d.employerEmail,
         company_name: d.companyName,
         job_id: d.jobId,
         job_title: d.jobTitle,
@@ -1176,7 +1176,7 @@ export async function getCandidateForwardedOpenings(
 // --- Invite candidate via email -----------------------------------------------
 
 /**
- * POST /api/jobs/marketer/candidates/:id/invite
+ * POST /api/jobs/employer/candidates/:id/invite
  * Sends an invite email to a candidate in the marketer's roster.
  * Creates a CompanyInvite record with a unique token.
  */
@@ -1188,15 +1188,15 @@ export async function inviteCandidate(
   try {
     const { id } = req.params;
     const { offerNote } = req.body as { offerNote?: string };
-    const marketerId = req.user!.userId;
+    const employerId = req.user!.userId;
 
-    const company = await Company.findOne({ adminUserId: marketerId }).lean();
+    const company = await Company.findOne({ adminUserId: employerId }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
       return;
     }
 
-    const mc = await MarketerCandidate.findOne({ _id: id, marketerId }).lean();
+    const mc = await EmployerCandidate.findOne({ _id: id, employerId }).lean();
     if (!mc) {
       res.status(404).json({ error: "Candidate not found in your roster" });
       return;
@@ -1216,8 +1216,8 @@ export async function inviteCandidate(
         $setOnInsert: {
           companyId: company._id,
           companyName: company.name,
-          marketerId,
-          marketerEmail: req.user!.email,
+          employerId,
+          employerEmail: req.user!.email,
           candidateEmail: mc.candidateEmail,
           candidateName: mc.candidateName,
         },
@@ -1226,7 +1226,7 @@ export async function inviteCandidate(
     ).lean();
 
     // Update roster entry with invite status
-    await MarketerCandidate.updateOne(
+    await EmployerCandidate.updateOne(
       { _id: mc._id },
       {
         $set: {
@@ -1271,7 +1271,7 @@ export async function inviteCandidate(
 
 /**
  * GET /api/jobs/invite/:token
- * Public � verifies an invite token and returns the offer details.
+ * Public Ã¯Â¿Â½ verifies an invite token and returns the offer details.
  */
 export async function verifyInvite(
   _req: Request,
@@ -1294,7 +1294,7 @@ export async function verifyInvite(
           id: invite._id,
           company_id: invite.companyId,
           company_name: invite.companyName,
-          marketer_email: invite.marketerEmail,
+          employer_email: invite.employerEmail,
           candidate_email: invite.candidateEmail,
           candidate_name: invite.candidateName,
           offer_note: invite.offerNote,
@@ -1314,7 +1314,7 @@ export async function verifyInvite(
           id: invite._id,
           company_id: invite.companyId,
           company_name: invite.companyName,
-          marketer_email: invite.marketerEmail,
+          employer_email: invite.employerEmail,
           candidate_email: invite.candidateEmail,
           candidate_name: invite.candidateName,
           offer_note: invite.offerNote,
@@ -1333,7 +1333,7 @@ export async function verifyInvite(
         id: invite._id,
         company_id: invite.companyId,
         company_name: invite.companyName,
-        marketer_email: invite.marketerEmail,
+        employer_email: invite.employerEmail,
         candidate_email: invite.candidateEmail,
         candidate_name: invite.candidateName,
         offer_note: invite.offerNote,
@@ -1350,7 +1350,7 @@ export async function verifyInvite(
 
 /**
  * POST /api/jobs/invite/:token/accept
- * Candidate accepts the invite � links their profile to the company.
+ * Candidate accepts the invite Ã¯Â¿Â½ links their profile to the company.
  */
 export async function acceptInvite(
   req: Request,
@@ -1373,7 +1373,7 @@ export async function acceptInvite(
     );
 
     // Update roster entry
-    await MarketerCandidate.updateMany(
+    await EmployerCandidate.updateMany(
       {
         companyId: invite.companyId,
         candidateEmail: invite.candidateEmail,
@@ -1413,7 +1413,7 @@ export async function acceptInvite(
 
 /**
  * GET /api/jobs/companies/search?q=foo
- * Public � fuzzy search for company names (for candidate registration dropdown).
+ * Public Ã¯Â¿Â½ fuzzy search for company names (for candidate registration dropdown).
  */
 export async function searchCompanies(
   req: Request,
@@ -1444,7 +1444,7 @@ export async function searchCompanies(
 // --- Forward opening WITH email notification ----------------------------------
 
 /**
- * POST /api/jobs/marketer/forward-with-email
+ * POST /api/jobs/employer/forward-with-email
  * Body: { candidateEmail, jobId, note? }
  * Forwards a job opening to a candidate AND sends an email notification.
  */
@@ -1466,14 +1466,14 @@ export async function forwardOpeningWithEmail(
     }
 
     const company = await Company.findOne({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
     if (!company) {
       res.status(400).json({ error: "Register your company first" });
       return;
     }
 
-    const mc = await MarketerCandidate.findOne({
+    const mc = await EmployerCandidate.findOne({
       companyId: company._id,
       candidateEmail: candidateEmail.trim().toLowerCase(),
     }).lean();
@@ -1494,8 +1494,8 @@ export async function forwardOpeningWithEmail(
 
     try {
       const doc = await ForwardedOpening.create({
-        marketerId: req.user!.userId,
-        marketerEmail: req.user!.email,
+        employerId: req.user!.userId,
+        employerEmail: req.user!.email,
         companyId: company._id,
         companyName: company.name,
         candidateEmail: candidateEmail.trim().toLowerCase(),
@@ -1531,7 +1531,7 @@ export async function forwardOpeningWithEmail(
         toName: mc.candidateName || candidateEmail,
         fromName: `${company.name} (via MatchDB)`,
         fromEmail: req.user!.email,
-        subjectContext: `Job Opening: ${job.title} � ${job.location || "Remote"}`,
+        subjectContext: `Job Opening: ${job.title} Ã¯Â¿Â½ ${job.location || "Remote"}`,
         emailBody: `Hi ${mc.candidateName || "there"},\n\nYour recruiter at ${company.name} has shared a job opening with you:\n\nTitle: ${job.title}\nLocation: ${job.location || "Remote"}\nType: ${job.jobType}${subTypeSuffix}\nCompensation: ${comp}\nSkills: ${skillsList}\n\n${recruiterNote}Log in to MatchDB to view details and apply.\n\nBest regards,\nThe MatchDB Team`,
       }).catch((err) => console.error("[Forward Email] Send failed:", err));
 
@@ -1560,7 +1560,7 @@ export async function forwardOpeningWithEmail(
 // --- Update forwarded opening status ------------------------------------------
 
 /**
- * PATCH /api/jobs/marketer/forwarded/:id/status
+ * PATCH /api/jobs/employer/forwarded/:id/status
  * Body: { status: "applied" | "hired" | "declined" }
  */
 export async function updateForwardedStatus(
@@ -1587,7 +1587,7 @@ export async function updateForwardedStatus(
     }
 
     const doc = await ForwardedOpening.updateMany(
-      { _id: id, marketerId: req.user!.userId },
+      { _id: id, employerId: req.user!.userId },
       { $set: { status } },
     );
 
@@ -1606,7 +1606,7 @@ export async function updateForwardedStatus(
 
 /**
  * GET /api/jobs/candidate/my-detail
- * Returns the full detail view for the logged-in candidate � same structure
+ * Returns the full detail view for the logged-in candidate Ã¯Â¿Â½ same structure
  * as the marketer's candidate detail but:
  *  - NOT scoped to a single marketer (all financials from all marketers)
  *  - marketer_info: roster entries linking this candidate to marketers
@@ -1622,7 +1622,7 @@ export async function getCandidateMyDetail(
     // Profile
     const profile = await CandidateProfile.findOne({ email }).lean();
 
-    // Applications (projects) — separate job + financials lookups
+    // Applications (projects) Ã¢â‚¬â€ separate job + financials lookups
     const applications = profile?.candidateId
       ? await Application.find({ candidateId: profile.candidateId })
           .sort({ createdAt: -1 })
@@ -1669,8 +1669,8 @@ export async function getCandidateMyDetail(
           .lean()
       : [];
 
-    // Marketer roster entries that include this candidate — separate company lookup
-    const rosterEntries = await MarketerCandidate.find({
+    // Marketer roster entries that include this candidate Ã¢â‚¬â€ separate company lookup
+    const rosterEntries = await EmployerCandidate.find({
       candidateEmail: email,
     }).lean();
     const companyIds = [...new Set(rosterEntries.map((r) => r.companyId))];
@@ -1684,7 +1684,7 @@ export async function getCandidateMyDetail(
     // Count forwarded openings per marketer for the summary
     const forwardedCountByMarketer = forwarded.reduce<Record<string, number>>(
       (acc, f) => {
-        acc[f.marketerId] = (acc[f.marketerId] ?? 0) + 1;
+        acc[f.employerId] = (acc[f.employerId] ?? 0) + 1;
         return acc;
       },
       {},
@@ -1735,7 +1735,7 @@ export async function getCandidateMyDetail(
           applied_at: a.createdAt?.toISOString() ?? "",
           financials: fins.map((fin: any) => ({
             id: fin._id,
-            uid: fin.marketerId,
+            uid: fin.employerId,
             billRate: Number(fin.billRate),
             payRate: Number(fin.payRate),
             hoursWorked: Number(fin.hoursWorked),
@@ -1763,7 +1763,7 @@ export async function getCandidateMyDetail(
         job_type: f.jobType,
         job_sub_type: f.jobSubType,
         vendor_email: f.vendorEmail,
-        marketer_email: f.marketerEmail,
+        employer_email: f.employerEmail,
         company_name: f.companyName,
         status: f.status,
         note: f.note,
@@ -1781,12 +1781,12 @@ export async function getCandidateMyDetail(
       })),
       marketer_info: rosterEntries.map((mc) => ({
         id: mc._id,
-        uid: mc.marketerId,
+        uid: mc.employerId,
         company_id: mc.companyId,
         company_name: companyMap.get(mc.companyId)?.name ?? "",
         invite_status: mc.inviteStatus,
         invite_sent_at: mc.inviteSentAt?.toISOString() ?? null,
-        forwarded_count: forwardedCountByMarketer[mc.marketerId] ?? 0,
+        forwarded_count: forwardedCountByMarketer[mc.employerId] ?? 0,
         created_at: mc.createdAt?.toISOString() ?? "",
       })),
     });
@@ -1803,7 +1803,7 @@ export async function getClientCompanies(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const docs = await ClientCompany.find({ marketerId: req.user!.userId })
+    const docs = await ClientCompany.find({ employerId: req.user!.userId })
       .sort({ name: 1 })
       .lean();
     res.json(docs.map((d) => ({ id: d._id, name: d.name })));
@@ -1820,7 +1820,7 @@ export async function getVendorCompanies(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const docs = await VendorCompany.find({ marketerId: req.user!.userId })
+    const docs = await VendorCompany.find({ employerId: req.user!.userId })
       .sort({ name: 1 })
       .lean();
     res.json(docs.map((d) => ({ id: d._id, name: d.name })));

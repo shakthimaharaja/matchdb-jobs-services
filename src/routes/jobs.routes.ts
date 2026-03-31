@@ -28,7 +28,7 @@ import {
   requireVendor,
   requireCandidate,
 } from "../middleware/auth.middleware";
-import { getCandidateMyDetail } from "../controllers/marketer.controller";
+import { getCandidateMyDetail } from "../controllers/employer.controller";
 
 const router = Router();
 

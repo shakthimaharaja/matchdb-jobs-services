@@ -3,6 +3,7 @@ import mongoose, { Schema } from "mongoose";
 export interface ICandidateProfile {
   _id: string;
   candidateId: string;
+  displayId: string; // e.g. "CND-0001" — human-readable unique candidate ID
   username: string;
   name: string;
   email: string;
@@ -35,6 +36,7 @@ const CandidateProfileSchema = new Schema<ICandidateProfile>(
       default: () => new mongoose.Types.ObjectId().toString(),
     },
     candidateId: { type: String, required: true, unique: true },
+    displayId: { type: String, default: "", unique: true, sparse: true },
     username: { type: String, default: "" },
     name: { type: String, default: "" },
     email: { type: String, default: "" },

@@ -4,7 +4,7 @@ export interface ITimesheet {
   _id: string;
   candidateId: string;
   candidateName: string;
-  marketerId: string;
+  employerId: string;
   companyId: string;
   applicationId: string;
   jobTitle: string;
@@ -28,7 +28,7 @@ const TimesheetSchema = new Schema<ITimesheet>(
     },
     candidateId: { type: String, required: true },
     candidateName: { type: String, default: "" },
-    marketerId: { type: String, required: true },
+    employerId: { type: String, required: true },
     companyId: { type: String, default: "" },
     applicationId: { type: String, default: "" },
     jobTitle: { type: String, default: "" },
@@ -45,7 +45,7 @@ const TimesheetSchema = new Schema<ITimesheet>(
 );
 
 TimesheetSchema.index({ candidateId: 1, weekStart: 1 }, { unique: true });
-TimesheetSchema.index({ marketerId: 1, status: 1 });
+TimesheetSchema.index({ employerId: 1, status: 1 });
 TimesheetSchema.index({ candidateId: 1, weekStart: -1 });
 
 export const Timesheet = mongoose.model<ITimesheet>(

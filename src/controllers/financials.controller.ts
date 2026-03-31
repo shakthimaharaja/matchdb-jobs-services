@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { Application, ProjectFinancial } from "../models";
 
-// ─── US State Tax Rates (2024–2025 approximate top marginal income tax rates) ─
+// â”€â”€â”€ US State Tax Rates (2024â€“2025 approximate top marginal income tax rates) â”€
 // States with no income tax: AK, FL, NV, NH, SD, TN, TX, WA, WY
 // Source: compiled from public state tax authority data
 
@@ -59,7 +59,7 @@ const US_STATE_TAX: Record<string, { name: string; taxPct: number }> = {
   DC: { name: "District of Columbia", taxPct: 10.75 },
 };
 
-// ─── Helper: compute derived financial fields ─────────────────────────────────
+// â”€â”€â”€ Helper: compute derived financial fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function computeFinancials(input: {
   billRate: number;
@@ -86,7 +86,7 @@ function computeFinancials(input: {
   };
 }
 
-// ─── GET /api/jobs/marketer/financials/states ─────────────────────────────────
+// â”€â”€â”€ GET /api/jobs/marketer/financials/states â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Returns the list of US states with their tax rates.
@@ -104,7 +104,7 @@ export async function getStateTaxRates(
   res.json(states);
 }
 
-// ─── GET /api/jobs/marketer/financials/:applicationId ─────────────────────────
+// â”€â”€â”€ GET /api/jobs/marketer/financials/:applicationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Get the financial record for a specific application (by marketer).
@@ -117,7 +117,7 @@ export async function getProjectFinancial(
   try {
     const record = await ProjectFinancial.findOne({
       applicationId: req.params.applicationId,
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     }).lean();
 
     if (!record) {
@@ -131,7 +131,7 @@ export async function getProjectFinancial(
   }
 }
 
-// ─── GET /api/jobs/marketer/financials/candidate/:candidateId ─────────────────
+// â”€â”€â”€ GET /api/jobs/marketer/financials/candidate/:candidateId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Get all financial records for a candidate under this marketer.
@@ -143,7 +143,7 @@ export async function getCandidateFinancials(
 ): Promise<void> {
   try {
     const records = await ProjectFinancial.find({
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
       candidateId: req.params.candidateId,
     })
       .sort({ createdAt: -1 })
@@ -186,7 +186,7 @@ export async function getCandidateFinancials(
   }
 }
 
-// ─── POST /api/jobs/marketer/financials ───────────────────────────────────────
+// â”€â”€â”€ POST /api/jobs/marketer/financials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Create or update financial data for an application.
@@ -293,8 +293,8 @@ export async function upsertProjectFinancial(
     };
 
     const record = await ProjectFinancial.findOneAndUpdate(
-      { applicationId, marketerId: req.user!.userId },
-      { $set: { ...data, applicationId, marketerId: req.user!.userId } },
+      { applicationId, employerId: req.user!.userId },
+      { $set: { ...data, applicationId, employerId: req.user!.userId } },
       { upsert: true, new: true },
     ).lean();
 
@@ -304,7 +304,7 @@ export async function upsertProjectFinancial(
   }
 }
 
-// ─── DELETE /api/jobs/marketer/financials/:applicationId ──────────────────────
+// â”€â”€â”€ DELETE /api/jobs/marketer/financials/:applicationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function deleteProjectFinancial(
   req: Request,
@@ -314,7 +314,7 @@ export async function deleteProjectFinancial(
   try {
     await ProjectFinancial.deleteMany({
       applicationId: req.params.applicationId,
-      marketerId: req.user!.userId,
+      employerId: req.user!.userId,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -322,7 +322,7 @@ export async function deleteProjectFinancial(
   }
 }
 
-// ─── GET /api/jobs/marketer/financials/summary ────────────────────────────────
+// â”€â”€â”€ GET /api/jobs/marketer/financials/summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Returns aggregate financial summary across all projects for this marketer.
@@ -334,7 +334,7 @@ export async function getFinancialSummary(
 ): Promise<void> {
   try {
     const [agg] = await ProjectFinancial.aggregate([
-      { $match: { marketerId: req.user!.userId } },
+      { $match: { employerId: req.user!.userId } },
       {
         $group: {
           _id: null,
@@ -367,13 +367,13 @@ export async function getFinancialSummary(
   }
 }
 
-// ─── Helper to format Decimal to number ───────────────────────────────────────
+// â”€â”€â”€ Helper to format Decimal to number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function formatFinancial(r: any) {
   return {
     id: r._id,
     applicationId: r.applicationId,
-    marketerId: r.marketerId,
+    employerId: r.employerId,
     candidateId: r.candidateId,
     candidateEmail: r.candidateEmail,
     billRate: toNum(r.billRate),

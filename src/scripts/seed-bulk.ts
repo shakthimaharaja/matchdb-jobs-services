@@ -1,11 +1,11 @@
 /**
- * seed-bulk.ts — APPENDS bulk test data to the jobs database.
+ * seed-bulk.ts â€” APPENDS bulk test data to the jobs database.
  * Run AFTER the base `npm run seed` so the admin accounts, companies, and
  * base candidates already exist.
  *
  * Adds:
  *   30 new job openings for admin@vendor.com
- *   20 new candidate profiles (C11–C30)
+ *   20 new candidate profiles (C11â€“C30)
  *   ~46 applications linking new candidates to jobs
  *   20 marketer-candidate roster links for admin@marketer.com
  *   20 forwarded openings
@@ -25,7 +25,7 @@ import {
   PokeRecord,
   PokeLog,
   Company,
-  MarketerCandidate,
+  EmployerCandidate,
   ForwardedOpening,
   ProjectFinancial,
   Timesheet,
@@ -34,7 +34,7 @@ import {
   VendorCompany,
 } from "../models";
 
-/* ── helpers ────────────────────────────────────────────────────────── */
+/* â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const oid = () => new mongoose.Types.ObjectId().toString();
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
 const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000);
@@ -45,11 +45,11 @@ const monday = (weeksAgo: number) => {
   return d;
 };
 
-/* ── shared IDs from the base seed ──────────────────────────────────── */
+/* â”€â”€ shared IDs from the base seed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const ADMIN_VENDOR = "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa";
 const ADMIN_MARKETER = "aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa";
 
-/* ── new candidate IDs — must match shell-services seed-bulk ────────── */
+/* â”€â”€ new candidate IDs â€” must match shell-services seed-bulk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const C11 = "cccccccc-0011-0011-0011-cccccccccccc";
 const C12 = "cccccccc-0012-0012-0012-cccccccccccc";
 const C13 = "cccccccc-0013-0013-0013-cccccccccccc";
@@ -71,7 +71,7 @@ const C28 = "cccccccc-0028-0028-0028-cccccccccccc";
 const C29 = "cccccccc-0029-0029-0029-cccccccccccc";
 const C30 = "cccccccc-0030-0030-0030-cccccccccccc";
 
-/* ── financial helper ───────────────────────────────────────────────── */
+/* â”€â”€ financial helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function fin(
   billRate: number,
   payRate: number,
@@ -102,13 +102,13 @@ function fin(
 /* ================================================================== */
 async function seedBulk() {
   await connectMongo();
-  console.log("🌱 Bulk-seeding matchdb-jobs database...\n");
+  console.log("ðŸŒ± Bulk-seeding matchdb-jobs database...\n");
 
   /* look up existing company for admin marketer */
-  const company = await Company.findOne({ marketerId: ADMIN_MARKETER }).lean();
+  const company = await Company.findOne({ adminUserId: ADMIN_MARKETER }).lean();
   if (!company) {
     console.error(
-      "❌  Company for admin@marketer.com not found. Run base seed first.",
+      "âŒ  Company for admin@marketer.com not found. Run base seed first.",
     );
     process.exit(1);
   }
@@ -145,10 +145,10 @@ async function seedBulk() {
     candidateId: { $in: BULK_CANDIDATE_IDS },
   });
   await Application.deleteMany({ candidateId: { $in: BULK_CANDIDATE_IDS } });
-  await MarketerCandidate.deleteMany({ marketerId: ADMIN_MARKETER });
-  await ForwardedOpening.deleteMany({ marketerId: ADMIN_MARKETER });
-  await ProjectFinancial.deleteMany({ marketerId: ADMIN_MARKETER });
-  await Timesheet.deleteMany({ marketerId: ADMIN_MARKETER });
+  await EmployerCandidate.deleteMany({ employerId: ADMIN_MARKETER });
+  await ForwardedOpening.deleteMany({ employerId: ADMIN_MARKETER });
+  await ProjectFinancial.deleteMany({ employerId: ADMIN_MARKETER });
+  await Timesheet.deleteMany({ employerId: ADMIN_MARKETER });
   await PokeRecord.deleteMany({
     $or: [
       {
@@ -165,12 +165,12 @@ async function seedBulk() {
   });
   await PokeLog.deleteMany({ userId: { $in: BULK_CANDIDATE_IDS } });
   await InterviewInvite.deleteMany({ vendorId: ADMIN_VENDOR });
-  await ClientCompany.deleteMany({ marketerId: ADMIN_MARKETER });
-  await VendorCompany.deleteMany({ marketerId: ADMIN_MARKETER });
-  console.log("  ✓ Cleaned up previous bulk-seed data");
+  await ClientCompany.deleteMany({ employerId: ADMIN_MARKETER });
+  await VendorCompany.deleteMany({ employerId: ADMIN_MARKETER });
+  console.log("  âœ“ Cleaned up previous bulk-seed data");
 
   /* ================================================================ */
-  /*  CLIENT & VENDOR COMPANIES — lookup tables                        */
+  /*  CLIENT & VENDOR COMPANIES â€” lookup tables                        */
   /* ================================================================ */
 
   const CC_GOOGLE = oid();
@@ -180,13 +180,13 @@ async function seedBulk() {
   const CC_NETFLIX = oid();
 
   const clientCompanies = await ClientCompany.insertMany([
-    { _id: CC_GOOGLE, name: "Google", marketerId: ADMIN_MARKETER },
-    { _id: CC_AMAZON, name: "Amazon", marketerId: ADMIN_MARKETER },
-    { _id: CC_META, name: "Meta", marketerId: ADMIN_MARKETER },
-    { _id: CC_MICROSOFT, name: "Microsoft", marketerId: ADMIN_MARKETER },
-    { _id: CC_NETFLIX, name: "Netflix", marketerId: ADMIN_MARKETER },
+    { _id: CC_GOOGLE, name: "Google", employerId: ADMIN_MARKETER },
+    { _id: CC_AMAZON, name: "Amazon", employerId: ADMIN_MARKETER },
+    { _id: CC_META, name: "Meta", employerId: ADMIN_MARKETER },
+    { _id: CC_MICROSOFT, name: "Microsoft", employerId: ADMIN_MARKETER },
+    { _id: CC_NETFLIX, name: "Netflix", employerId: ADMIN_MARKETER },
   ]);
-  console.log(`  ✓ Created ${clientCompanies.length} client companies`);
+  console.log(`  âœ“ Created ${clientCompanies.length} client companies`);
 
   const ccByName: Record<string, string> = {
     Google: CC_GOOGLE,
@@ -205,21 +205,21 @@ async function seedBulk() {
     {
       _id: VC_TECHBRIDGE,
       name: "TechBridge Staffing",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
     },
     {
       _id: VC_PINNACLE,
       name: "Pinnacle Solutions",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
     },
-    { _id: VC_APEX, name: "Apex Digital", marketerId: ADMIN_MARKETER },
+    { _id: VC_APEX, name: "Apex Digital", employerId: ADMIN_MARKETER },
     {
       _id: VC_SECURENET,
       name: "SecureNet Partners",
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
     },
   ]);
-  console.log(`  ✓ Created ${vendorCompanies.length} vendor companies`);
+  console.log(`  âœ“ Created ${vendorCompanies.length} vendor companies`);
 
   const vcByName: Record<string, string> = {
     "TechBridge Staffing": VC_TECHBRIDGE,
@@ -228,7 +228,7 @@ async function seedBulk() {
     "SecureNet Partners": VC_SECURENET,
   };
 
-  /* Client assignment for jobs — distributes 30 jobs across clients */
+  /* Client assignment for jobs â€” distributes 30 jobs across clients */
   const jobClientCycle = [
     CC_GOOGLE, // BJ[0]
     CC_AMAZON, // BJ[1]
@@ -263,7 +263,7 @@ async function seedBulk() {
   ];
 
   /* ================================================================ */
-  /*  30 NEW JOBS — all posted by admin@vendor.com                     */
+  /*  30 NEW JOBS â€” all posted by admin@vendor.com                     */
   /* ================================================================ */
   const BJ = Array.from({ length: 30 }, () => oid());
 
@@ -1021,7 +1021,7 @@ async function seedBulk() {
       sourceUserId: ADMIN_VENDOR,
     },
   ]);
-  console.log(`  ✓ Created ${bulkJobs.length} jobs`);
+  console.log(`  âœ“ Created ${bulkJobs.length} jobs`);
 
   /* Assign clientCompanyId to each job */
   await Job.bulkWrite(
@@ -1032,7 +1032,7 @@ async function seedBulk() {
       },
     })),
   );
-  console.log(`  ✓ Assigned client companies to ${BJ.length} jobs`);
+  console.log(`  âœ“ Assigned client companies to ${BJ.length} jobs`);
 
   /* ================================================================ */
   /*  20 NEW CANDIDATE PROFILES                                        */
@@ -1057,7 +1057,7 @@ async function seedBulk() {
       resumeSummary:
         "5 years building high-performance SPAs for fintech and e-commerce.",
       resumeExperience:
-        "FrontendCo (2022–present): Senior FE — Vue 3 migration.\nWebStudio (2020–2022): React + Next.js for SaaS dashboards.",
+        "FrontendCo (2022â€“present): Senior FE â€” Vue 3 migration.\nWebStudio (2020â€“2022): React + Next.js for SaaS dashboards.",
       resumeEducation: "B.S. Computer Science, Cornell University, 2020",
       resumeAchievements: "Led Vue 3 migration reducing bundle size by 45%.",
       companyId: COMPANY_ID,
@@ -1090,7 +1090,7 @@ async function seedBulk() {
       resumeSummary:
         "7 years of enterprise Java development and distributed systems.",
       resumeExperience:
-        "EnterpriseTech (2021–present): Senior Java Dev — Kafka event mesh.\nCorpSoft (2018–2021): Spring Boot services for banking platform.",
+        "EnterpriseTech (2021â€“present): Senior Java Dev â€” Kafka event mesh.\nCorpSoft (2018â€“2021): Spring Boot services for banking platform.",
       resumeEducation: "M.S. Computer Science, Georgia Tech, 2018",
       resumeAchievements:
         "Designed event-sourcing architecture handling 100k events/sec.",
@@ -1115,9 +1115,9 @@ async function seedBulk() {
       profileCountry: "US",
       bio: "Data scientist with ML expertise in NLP and computer vision.",
       resumeSummary:
-        "4 years applied ML in production — NLP, classification, recommendation.",
+        "4 years applied ML in production â€” NLP, classification, recommendation.",
       resumeExperience:
-        "AI Research Lab (2023–present): ML models for document understanding.\nMLStartup (2021–2023): NLP pipeline for sentiment analysis.",
+        "AI Research Lab (2023â€“present): ML models for document understanding.\nMLStartup (2021â€“2023): NLP pipeline for sentiment analysis.",
       resumeEducation: "M.S. Machine Learning, University of Washington, 2021",
       resumeAchievements:
         "Published 2 papers on transformer-based document classification.",
@@ -1144,7 +1144,7 @@ async function seedBulk() {
       resumeSummary:
         "6 years designing scalable cloud infrastructure for high-traffic platforms.",
       resumeExperience:
-        "CloudNative (2021–present): Architect — multi-region AWS/GCP.\nDevInfra (2019–2021): Cloud Engineer — Terraform for 200+ services.",
+        "CloudNative (2021â€“present): Architect â€” multi-region AWS/GCP.\nDevInfra (2019â€“2021): Cloud Engineer â€” Terraform for 200+ services.",
       resumeEducation: "B.S. Computer Engineering, Stanford University, 2019",
       resumeAchievements:
         "Reduced cloud costs by $1.2M/year through right-sizing and Reserved Instances.",
@@ -1178,7 +1178,7 @@ async function seedBulk() {
       resumeSummary:
         "5 years building consumer and enterprise mobile apps on iOS and Android.",
       resumeExperience:
-        "MobileFirst (2022–present): Flutter + native iOS modules.\nAppWorks (2020–2022): Kotlin Android app — 500k+ downloads.",
+        "MobileFirst (2022â€“present): Flutter + native iOS modules.\nAppWorks (2020â€“2022): Kotlin Android app â€” 500k+ downloads.",
       resumeEducation: "B.S. Computer Science, MIT, 2020",
       resumeAchievements:
         "Shipped 4 apps to App Store / Play Store with 4.7+ avg rating.",
@@ -1205,7 +1205,7 @@ async function seedBulk() {
       resumeSummary:
         "4 years of Django/FastAPI backend development with strong testing culture.",
       resumeExperience:
-        "PyStack (2022–present): FastAPI microservices + PostgreSQL.\nDevShop (2021–2022): Django REST APIs for e-commerce.",
+        "PyStack (2022â€“present): FastAPI microservices + PostgreSQL.\nDevShop (2021â€“2022): Django REST APIs for e-commerce.",
       resumeEducation: "B.S. Software Engineering, CU Boulder, 2021",
       resumeAchievements:
         "Achieved 98% test coverage on core payment microservices.",
@@ -1239,7 +1239,7 @@ async function seedBulk() {
       resumeSummary:
         "6 years of C#/.NET development with Azure cloud-native architecture.",
       resumeExperience:
-        "AzureSoft (2021–present): .NET 8 microservices on AKS.\nCorpDev (2019–2021): WPF desktop → .NET web migration.",
+        "AzureSoft (2021â€“present): .NET 8 microservices on AKS.\nCorpDev (2019â€“2021): WPF desktop â†’ .NET web migration.",
       resumeEducation: "B.S. Computer Science, Georgia State University, 2019",
       resumeAchievements:
         "Migrated monolith to 12 microservices with zero downtime.",
@@ -1266,7 +1266,7 @@ async function seedBulk() {
       resumeSummary:
         "5 years of Angular development for enterprise B2B applications.",
       resumeExperience:
-        "AngularPro (2022–present): Angular 17 dashboard with NgRx.\nUITeam (2020–2022): Angular migration from AngularJS.",
+        "AngularPro (2022â€“present): Angular 17 dashboard with NgRx.\nUITeam (2020â€“2022): Angular migration from AngularJS.",
       resumeEducation: "M.S. Computer Science, Northwestern University, 2020",
       resumeAchievements:
         "Led successful AngularJS to Angular 15 migration for 40+ screens.",
@@ -1293,7 +1293,7 @@ async function seedBulk() {
       resumeSummary:
         "4 years building data pipelines and lakehouse architectures.",
       resumeExperience:
-        "DataPipeline (2022–present): Snowflake + dbt transformations.\nETLWorks (2021–2022): Spark pipelines on AWS EMR.",
+        "DataPipeline (2022â€“present): Snowflake + dbt transformations.\nETLWorks (2021â€“2022): Spark pipelines on AWS EMR.",
       resumeEducation: "B.S. Data Science, Oregon State University, 2021",
       resumeAchievements:
         "Built dbt framework reducing analyst query time by 60%.",
@@ -1327,7 +1327,7 @@ async function seedBulk() {
       resumeSummary:
         "7 years in security: SOC operations, penetration testing, and cloud security.",
       resumeExperience:
-        "CyberGuard (2021–present): Security Lead — managed SOC for 1000+ endpoints.\nSecOps (2018–2021): Penetration Tester — OWASP Top 10.",
+        "CyberGuard (2021â€“present): Security Lead â€” managed SOC for 1000+ endpoints.\nSecOps (2018â€“2021): Penetration Tester â€” OWASP Top 10.",
       resumeEducation: "M.S. Cybersecurity, George Washington University, 2018",
       resumeAchievements:
         "CISSP, OSCP certified. Zero breaches in 3 years of SOC leadership.",
@@ -1354,7 +1354,7 @@ async function seedBulk() {
       resumeSummary:
         "8 years of systems and infrastructure programming for low-latency workloads.",
       resumeExperience:
-        "SystemsForge (2020–present): Rust networking stack — 1M concurrent conns.\nBackendLab (2017–2020): Go microservices for trading platform.",
+        "SystemsForge (2020â€“present): Rust networking stack â€” 1M concurrent conns.\nBackendLab (2017â€“2020): Go microservices for trading platform.",
       resumeEducation:
         "M.S. Computer Science, Carnegie Mellon University, 2017",
       resumeAchievements:
@@ -1389,7 +1389,7 @@ async function seedBulk() {
       resumeSummary:
         "5 years leading QA automation across web, mobile, and API layers.",
       resumeExperience:
-        "QualityFirst (2022–present): QA Architect — Playwright + Cypress.\nTestTeam (2020–2022): Selenium Grid for 3 product teams.",
+        "QualityFirst (2022â€“present): QA Architect â€” Playwright + Cypress.\nTestTeam (2020â€“2022): Selenium Grid for 3 product teams.",
       resumeEducation:
         "B.S. Software Engineering, University of Minnesota, 2020",
       resumeAchievements:
@@ -1424,7 +1424,7 @@ async function seedBulk() {
       resumeSummary:
         "3 years in blockchain: smart contracts, DeFi, and dApp development.",
       resumeExperience:
-        "Web3Labs (2023–present): Solidity smart contracts for DEX.\nCryptoStudio (2022–2023): Web3.js integration for NFT marketplace.",
+        "Web3Labs (2023â€“present): Solidity smart contracts for DEX.\nCryptoStudio (2022â€“2023): Web3.js integration for NFT marketplace.",
       resumeEducation: "B.S. Computer Science, NYU, 2022",
       resumeAchievements: "Audited smart contracts securing $50M+ in TVL.",
       companyId: COMPANY_ID,
@@ -1457,7 +1457,7 @@ async function seedBulk() {
       resumeSummary:
         "6 years leading product teams for B2B SaaS and developer platforms.",
       resumeExperience:
-        "AgileWorks (2021–present): PM — developer productivity platform.\nProdTech (2019–2021): Associate PM — CI/CD pipeline product.",
+        "AgileWorks (2021â€“present): PM â€” developer productivity platform.\nProdTech (2019â€“2021): Associate PM â€” CI/CD pipeline product.",
       resumeEducation: "MBA, UC Berkeley Haas, 2019",
       resumeAchievements:
         "Grew DAU by 300% through developer-focused product improvements.",
@@ -1491,7 +1491,7 @@ async function seedBulk() {
       resumeSummary:
         "5 years of NLP: from classical NLP to modern LLM-powered applications.",
       resumeExperience:
-        "NLPTech (2022–present): LLM fine-tuning and RAG pipeline.\nLangAI (2020–2022): NER and sentiment analysis at scale.",
+        "NLPTech (2022â€“present): LLM fine-tuning and RAG pipeline.\nLangAI (2020â€“2022): NER and sentiment analysis at scale.",
       resumeEducation: "Ph.D. Computer Science (NLP), MIT, 2020",
       resumeAchievements:
         "Patent on efficient retrieval-augmented generation method.",
@@ -1525,7 +1525,7 @@ async function seedBulk() {
       resumeSummary:
         "4 years designing user-centered products for consumer and enterprise.",
       resumeExperience:
-        "DesignStudio (2022–present): Lead Designer — mobile banking app.\nUXAgency (2021–2022): UX Designer — e-commerce redesign.",
+        "DesignStudio (2022â€“present): Lead Designer â€” mobile banking app.\nUXAgency (2021â€“2022): UX Designer â€” e-commerce redesign.",
       resumeEducation: "BFA Graphic Design, Parsons School of Design, 2021",
       resumeAchievements: "Redesign increased mobile conversion rate by 35%.",
       companyId: COMPANY_ID,
@@ -1551,7 +1551,7 @@ async function seedBulk() {
       resumeSummary:
         "6 years of firmware development for resource-constrained devices.",
       resumeExperience:
-        "EmbedTech (2021–present): Firmware Lead — BLE wearable device.\nIoTCorp (2019–2021): Embedded C for industrial sensors.",
+        "EmbedTech (2021â€“present): Firmware Lead â€” BLE wearable device.\nIoTCorp (2019â€“2021): Embedded C for industrial sensors.",
       resumeEducation: "M.S. Electrical Engineering, UT Austin, 2019",
       resumeAchievements:
         "Reduced BLE connection time from 3s to 200ms through protocol optimization.",
@@ -1585,7 +1585,7 @@ async function seedBulk() {
       resumeSummary:
         "4 years of Salesforce development: CPQ, Lightning, and API integrations.",
       resumeExperience:
-        "CRMPlatform (2022–present): Salesforce CPQ implementation.\nSFConsulting (2021–2022): Lightning components for financial services.",
+        "CRMPlatform (2022â€“present): Salesforce CPQ implementation.\nSFConsulting (2021â€“2022): Lightning components for financial services.",
       resumeEducation: "B.S. Information Systems, USF, 2021",
       resumeAchievements:
         "Salesforce Certified Platform Developer II. Built CPQ reducing quote time by 50%.",
@@ -1612,7 +1612,7 @@ async function seedBulk() {
       resumeSummary:
         "5 years running production Kubernetes and building internal developer platforms.",
       resumeExperience:
-        "PlatformOps (2022–present): K8s platform for 50+ services.\nReliabilityEng (2020–2022): SRE — Prometheus/Grafana observability stack.",
+        "PlatformOps (2022â€“present): K8s platform for 50+ services.\nReliabilityEng (2020â€“2022): SRE â€” Prometheus/Grafana observability stack.",
       resumeEducation: "B.S. Computer Science, UC San Diego, 2020",
       resumeAchievements:
         "Built self-service platform reducing deploy time from 2 hours to 10 minutes.",
@@ -1646,7 +1646,7 @@ async function seedBulk() {
       resumeSummary:
         "6 years administering PostgreSQL, MongoDB, and Oracle in production environments.",
       resumeExperience:
-        "DBExperts (2021–present): DBA Lead — PostgreSQL HA cluster.\nDataOps (2019–2021): MongoDB sharded cluster management.",
+        "DBExperts (2021â€“present): DBA Lead â€” PostgreSQL HA cluster.\nDataOps (2019â€“2021): MongoDB sharded cluster management.",
       resumeEducation: "B.S. Computer Science, Virginia Tech, 2019",
       resumeAchievements:
         "Designed HA setup achieving 99.999% uptime for financial transaction DB.",
@@ -1655,13 +1655,13 @@ async function seedBulk() {
       profileLocked: false,
     },
   ]);
-  console.log(`  ✓ Created ${profiles.length} candidate profiles`);
+  console.log(`  âœ“ Created ${profiles.length} candidate profiles`);
 
   /* ================================================================ */
-  /*  APPLICATIONS — new candidates apply to new & existing jobs       */
+  /*  APPLICATIONS â€” new candidates apply to new & existing jobs       */
   /* ================================================================ */
 
-  // Existing job IDs from the base seed — we query them
+  // Existing job IDs from the base seed â€” we query them
   const existingJobs = await Job.find({}, { _id: 1 }).lean();
   const existingJobIds = existingJobs.map((j) => j._id as string);
   // Base seed created J[0..19]; we reference some of them by title lookup
@@ -1702,14 +1702,14 @@ async function seedBulk() {
     status: string;
   };
   const appRows: AppRow[] = [
-    // ── C11 Anika (Frontend) ──
+    // â”€â”€ C11 Anika (Frontend) â”€â”€
     {
       idx: 0,
       jobId: BJ[0],
       jobTitle: "Senior Vue.js Developer",
       cId: C11,
       cEmail: "anika.patel@test.com",
-      cover: "Vue.js is my primary framework — 3 years of Vue 3 + Pinia.",
+      cover: "Vue.js is my primary framework â€” 3 years of Vue 3 + Pinia.",
       status: "accepted",
     },
     ...(J_REACT
@@ -1725,14 +1725,14 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C12 Marcus (Java) ──
+    // â”€â”€ C12 Marcus (Java) â”€â”€
     {
       idx: 2,
       jobId: BJ[4],
       jobTitle: "Senior Java Microservices Developer",
       cId: C12,
       cEmail: "marcus.thompson@test.com",
-      cover: "Java + Spring Boot + Kafka — this is exactly my stack.",
+      cover: "Java + Spring Boot + Kafka â€” this is exactly my stack.",
       status: "accepted",
     },
     ...(J_JAVA
@@ -1748,7 +1748,7 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C13 Elena (ML/DS) ──
+    // â”€â”€ C13 Elena (ML/DS) â”€â”€
     {
       idx: 4,
       jobId: BJ[6],
@@ -1767,7 +1767,7 @@ async function seedBulk() {
       cover: "Published researcher in transformer-based NLP.",
       status: "pending",
     },
-    // ── C14 Diego (Cloud) ──
+    // â”€â”€ C14 Diego (Cloud) â”€â”€
     {
       idx: 6,
       jobId: BJ[2],
@@ -1783,7 +1783,7 @@ async function seedBulk() {
       jobTitle: "Kubernetes Platform Lead",
       cId: C14,
       cEmail: "diego.torres@test.com",
-      cover: "K8s + ArgoCD — managed clusters for 100+ engineers.",
+      cover: "K8s + ArgoCD â€” managed clusters for 100+ engineers.",
       status: "reviewed",
     },
     ...(J_DEVOPS
@@ -1794,12 +1794,12 @@ async function seedBulk() {
             jobTitle: "DevOps / Cloud Engineer",
             cId: C14,
             cEmail: "diego.torres@test.com",
-            cover: "AWS + Terraform + K8s — strong DevOps.",
+            cover: "AWS + Terraform + K8s â€” strong DevOps.",
             status: "reviewed",
           },
         ]
       : []),
-    // ── C15 Yuki (Mobile) ──
+    // â”€â”€ C15 Yuki (Mobile) â”€â”€
     {
       idx: 9,
       jobId: BJ[3],
@@ -1840,14 +1840,14 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C16 Sarah (Python BE) ──
+    // â”€â”€ C16 Sarah (Python BE) â”€â”€
     {
       idx: 13,
       jobId: BJ[1],
       jobTitle: "Backend Python Engineer",
       cId: C16,
       cEmail: "sarah.mitchell@test.com",
-      cover: "Django + FastAPI — 4 years Python backend.",
+      cover: "Django + FastAPI â€” 4 years Python backend.",
       status: "accepted",
     },
     {
@@ -1859,24 +1859,24 @@ async function seedBulk() {
       cover: "Familiar with Rails + PostgreSQL stack.",
       status: "pending",
     },
-    // ── C17 Kwame (.NET) ──
+    // â”€â”€ C17 Kwame (.NET) â”€â”€
     {
       idx: 15,
       jobId: BJ[10],
       jobTitle: ".NET Backend Developer",
       cId: C17,
       cEmail: "kwame.asante@test.com",
-      cover: "C# + .NET 8 + Azure — exactly my stack.",
+      cover: "C# + .NET 8 + Azure â€” exactly my stack.",
       status: "accepted",
     },
-    // ── C18 Mei (Angular) ──
+    // â”€â”€ C18 Mei (Angular) â”€â”€
     {
       idx: 16,
       jobId: BJ[0],
       jobTitle: "Senior Vue.js Developer",
       cId: C18,
       cEmail: "mei.lin@test.com",
-      cover: "Angular background, learning Vue — strong TypeScript.",
+      cover: "Angular background, learning Vue â€” strong TypeScript.",
       status: "reviewed",
     },
     ...(J_ANGULAR
@@ -1892,7 +1892,7 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C19 Rafael (Data Eng) ──
+    // â”€â”€ C19 Rafael (Data Eng) â”€â”€
     {
       idx: 18,
       jobId: BJ[8],
@@ -1924,7 +1924,7 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C20 Fatima (Security) ──
+    // â”€â”€ C20 Fatima (Security) â”€â”€
     {
       idx: 21,
       jobId: BJ[27],
@@ -1956,14 +1956,14 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C21 Patrick (Go/Rust) ──
+    // â”€â”€ C21 Patrick (Go/Rust) â”€â”€
     {
       idx: 24,
       jobId: BJ[7],
       jobTitle: "Rust Systems Programmer",
       cId: C21,
       cEmail: "patrick.obrien@test.com",
-      cover: "Rust networking + systems — 3 years production Rust.",
+      cover: "Rust networking + systems â€” 3 years production Rust.",
       status: "accepted",
     },
     {
@@ -1988,7 +1988,7 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C22 Ingrid (QA) ──
+    // â”€â”€ C22 Ingrid (QA) â”€â”€
     {
       idx: 27,
       jobId: BJ[20],
@@ -2006,12 +2006,12 @@ async function seedBulk() {
             jobTitle: "QA Automation Lead",
             cId: C22,
             cEmail: "ingrid.larsson@test.com",
-            cover: "Selenium + Playwright — 5 years QA automation.",
+            cover: "Selenium + Playwright â€” 5 years QA automation.",
             status: "pending",
           },
         ]
       : []),
-    // ── C23 Vikram (Blockchain/Web3) ──
+    // â”€â”€ C23 Vikram (Blockchain/Web3) â”€â”€
     {
       idx: 29,
       jobId: BJ[21],
@@ -2029,12 +2029,12 @@ async function seedBulk() {
             jobTitle: "Blockchain Developer",
             cId: C23,
             cEmail: "vikram.khanna@test.com",
-            cover: "Solidity + Web3.js — DeFi protocols.",
+            cover: "Solidity + Web3.js â€” DeFi protocols.",
             status: "pending",
           },
         ]
       : []),
-    // ── C24 Natasha (PM) ──
+    // â”€â”€ C24 Natasha (PM) â”€â”€
     {
       idx: 31,
       jobId: BJ[13],
@@ -2057,14 +2057,14 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C25 Chen (AI/NLP) ──
+    // â”€â”€ C25 Chen (AI/NLP) â”€â”€
     {
       idx: 33,
       jobId: BJ[16],
       jobTitle: "NLP Research Engineer",
       cId: C25,
       cEmail: "chen.wei@test.com",
-      cover: "Ph.D. in NLP — transformer fine-tuning and RAG.",
+      cover: "Ph.D. in NLP â€” transformer fine-tuning and RAG.",
       status: "accepted",
     },
     {
@@ -2089,7 +2089,7 @@ async function seedBulk() {
           },
         ]
       : []),
-    // ── C26 Isabella (UX) ──
+    // â”€â”€ C26 Isabella (UX) â”€â”€
     {
       idx: 36,
       jobId: BJ[24],
@@ -2116,19 +2116,19 @@ async function seedBulk() {
             jobTitle: "UI/UX Designer (Contract)",
             cId: C26,
             cEmail: "isabella.santos@test.com",
-            cover: "Figma + design systems — 4 years experience.",
+            cover: "Figma + design systems â€” 4 years experience.",
             status: "reviewed",
           },
         ]
       : []),
-    // ── C27 Alexei (Embedded) ──
+    // â”€â”€ C27 Alexei (Embedded) â”€â”€
     {
       idx: 39,
       jobId: BJ[17],
       jobTitle: "IoT Firmware Developer",
       cId: C27,
       cEmail: "alexei.petrov@test.com",
-      cover: "BLE firmware for medical IoT — exactly my background.",
+      cover: "BLE firmware for medical IoT â€” exactly my background.",
       status: "accepted",
     },
     {
@@ -2148,19 +2148,19 @@ async function seedBulk() {
             jobTitle: "Embedded Systems Engineer",
             cId: C27,
             cEmail: "alexei.petrov@test.com",
-            cover: "C/C++ + RTOS + ARM — 6 years embedded.",
+            cover: "C/C++ + RTOS + ARM â€” 6 years embedded.",
             status: "accepted",
           },
         ]
       : []),
-    // ── C28 Amara (Salesforce) ──
+    // â”€â”€ C28 Amara (Salesforce) â”€â”€
     {
       idx: 42,
       jobId: BJ[15],
       jobTitle: "Salesforce Developer",
       cId: C28,
       cEmail: "amara.okafor@test.com",
-      cover: "Certified SF Platform Dev II — CPQ implementation.",
+      cover: "Certified SF Platform Dev II â€” CPQ implementation.",
       status: "accepted",
     },
     {
@@ -2180,12 +2180,12 @@ async function seedBulk() {
             jobTitle: "Salesforce Developer",
             cId: C28,
             cEmail: "amara.okafor@test.com",
-            cover: "Apex + Lightning — 4 years Salesforce.",
+            cover: "Apex + Lightning â€” 4 years Salesforce.",
             status: "reviewed",
           },
         ]
       : []),
-    // ── C29 Jordan (SRE/Platform) ──
+    // â”€â”€ C29 Jordan (SRE/Platform) â”€â”€
     {
       idx: 45,
       jobId: BJ[5],
@@ -2212,12 +2212,12 @@ async function seedBulk() {
             jobTitle: "Site Reliability Engineer",
             cId: C29,
             cEmail: "jordan.kim@test.com",
-            cover: "Prometheus + Grafana + K8s — SRE.",
+            cover: "Prometheus + Grafana + K8s â€” SRE.",
             status: "reviewed",
           },
         ]
       : []),
-    // ── C30 Leila (DBA) ──
+    // â”€â”€ C30 Leila (DBA) â”€â”€
     {
       idx: 48,
       jobId: BJ[14],
@@ -2249,7 +2249,7 @@ async function seedBulk() {
       status: r.status,
     })),
   );
-  console.log(`  ✓ Created ${applications.length} applications`);
+  console.log(`  âœ“ Created ${applications.length} applications`);
 
   // Update application counts on affected jobs
   const appCounts: Record<string, number> = {};
@@ -2262,7 +2262,7 @@ async function seedBulk() {
   );
 
   /* ================================================================ */
-  /*  MARKETER-CANDIDATE links — all 20 new candidates join Alpha      */
+  /*  MARKETER-CANDIDATE links â€” all 20 new candidates join Alpha      */
   /* ================================================================ */
   const mcData: [string, string, string][] = [
     [C11, "Anika Patel", "anika.patel@test.com"],
@@ -2287,21 +2287,21 @@ async function seedBulk() {
     [C30, "Leila Hashemi", "leila.hashemi@test.com"],
   ];
 
-  const mcRecords = await MarketerCandidate.insertMany(
+  const mcRecords = await EmployerCandidate.insertMany(
     mcData.map(([cid, name, email]) => ({
       _id: oid(),
       companyId: COMPANY_ID,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       candidateId: cid,
       candidateName: name,
       candidateEmail: email,
       inviteStatus: "accepted",
     })),
   );
-  console.log(`  ✓ Created ${mcRecords.length} marketer-candidate records`);
+  console.log(`  âœ“ Created ${mcRecords.length} marketer-candidate records`);
 
   /* ================================================================ */
-  /*  FORWARDED OPENINGS — marketer forwards jobs to new candidates    */
+  /*  FORWARDED OPENINGS â€” marketer forwards jobs to new candidates    */
   /* ================================================================ */
   const fwdData: {
     email: string;
@@ -2614,8 +2614,8 @@ async function seedBulk() {
   const forwarded = await ForwardedOpening.insertMany(
     fwdData.map((f) => ({
       _id: oid(),
-      marketerId: ADMIN_MARKETER,
-      marketerEmail: "admin@marketer.com",
+      employerId: ADMIN_MARKETER,
+      employerEmail: "admin@marketer.com",
       companyId: COMPANY_ID,
       companyName: COMPANY_NAME,
       candidateEmail: f.email,
@@ -2633,10 +2633,10 @@ async function seedBulk() {
       status: f.status,
     })),
   );
-  console.log(`  ✓ Created ${forwarded.length} forwarded openings`);
+  console.log(`  âœ“ Created ${forwarded.length} forwarded openings`);
 
   /* ================================================================ */
-  /*  PROJECT FINANCIALS — 15 projects for new candidates              */
+  /*  PROJECT FINANCIALS â€” 15 projects for new candidates              */
   /* ================================================================ */
   // Map: [appRow.idx, candidateId, candidateName, jobTitle, vendorName, billRate, payRate, hours, stateCode, taxPct%, cashPct%, amountPaid, status, projectStart, notes]
   type FinRow = [
@@ -2876,7 +2876,7 @@ async function seedBulk() {
       40000,
       "completed",
       "2024-10-01",
-      "Completed — wearable firmware",
+      "Completed â€” wearable firmware",
     ],
     [
       42,
@@ -2893,7 +2893,7 @@ async function seedBulk() {
       22320,
       "completed",
       "2025-01-01",
-      "Completed — CPQ implementation",
+      "Completed â€” CPQ implementation",
     ],
     [
       45,
@@ -3001,7 +3001,7 @@ async function seedBulk() {
         return {
           _id: oid(),
           applicationId: BA[appIdx],
-          marketerId: ADMIN_MARKETER,
+          employerId: ADMIN_MARKETER,
           candidateId: cid,
           candidateName: cName,
           jobTitle: jTitle,
@@ -3027,10 +3027,10 @@ async function seedBulk() {
       },
     ),
   );
-  console.log(`  ✓ Created ${financials.length} project financials`);
+  console.log(`  âœ“ Created ${financials.length} project financials`);
 
   /* ================================================================ */
-  /*  TIMESHEETS — 2 weeks per active financial candidate              */
+  /*  TIMESHEETS â€” 2 weeks per active financial candidate              */
   /* ================================================================ */
   const fullWeek = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 8, sat: 0, sun: 0 };
   const partWeek = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 4, sat: 0, sun: 0 };
@@ -3040,12 +3040,12 @@ async function seedBulk() {
   );
   const tsRecords: object[] = [];
   for (const [appIdx, cid, cName, jTitle] of activeFinRows) {
-    // Week 1 — approved
+    // Week 1 â€” approved
     tsRecords.push({
       _id: oid(),
       candidateId: cid,
       candidateName: cName,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: BA[appIdx],
       jobTitle: jTitle,
@@ -3056,12 +3056,12 @@ async function seedBulk() {
       submittedAt: daysAgo(12),
       approvedAt: daysAgo(11),
     });
-    // Week 2 — submitted (pending approval)
+    // Week 2 â€” submitted (pending approval)
     tsRecords.push({
       _id: oid(),
       candidateId: cid,
       candidateName: cName,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: BA[appIdx],
       jobTitle: jTitle,
@@ -3071,12 +3071,12 @@ async function seedBulk() {
       status: "submitted",
       submittedAt: daysAgo(3),
     });
-    // Current week — draft
+    // Current week â€” draft
     tsRecords.push({
       _id: oid(),
       candidateId: cid,
       candidateName: cName,
-      marketerId: ADMIN_MARKETER,
+      employerId: ADMIN_MARKETER,
       companyId: COMPANY_ID,
       applicationId: BA[appIdx],
       jobTitle: jTitle,
@@ -3087,10 +3087,10 @@ async function seedBulk() {
     });
   }
   const timesheets = await Timesheet.insertMany(tsRecords);
-  console.log(`  ✓ Created ${timesheets.length} timesheets`);
+  console.log(`  âœ“ Created ${timesheets.length} timesheets`);
 
   /* ================================================================ */
-  /*  POKE RECORDS — vendor↔candidate pokes for new candidates         */
+  /*  POKE RECORDS â€” vendorâ†”candidate pokes for new candidates         */
   /* ================================================================ */
   const pokeRows: {
     sId: string;
@@ -3106,7 +3106,7 @@ async function seedBulk() {
     jTitle: string;
     tVendorId?: string;
   }[] = [
-    // Admin Vendor → new candidates (in-app pokes)
+    // Admin Vendor â†’ new candidates (in-app pokes)
     {
       sId: ADMIN_VENDOR,
       sName: "Admin Vendor",
@@ -3115,7 +3115,7 @@ async function seedBulk() {
       tId: C11,
       tEmail: "anika.patel@test.com",
       tName: "Anika Patel",
-      subject: "Vue.js role — great frontend profile",
+      subject: "Vue.js role â€” great frontend profile",
       isEmail: false,
       jId: BJ[0],
       jTitle: "Senior Vue.js Developer",
@@ -3128,7 +3128,7 @@ async function seedBulk() {
       tId: C12,
       tEmail: "marcus.thompson@test.com",
       tName: "Marcus Thompson",
-      subject: "Java microservices — strong fit",
+      subject: "Java microservices â€” strong fit",
       isEmail: false,
       jId: BJ[4],
       jTitle: "Senior Java Microservices Developer",
@@ -3154,7 +3154,7 @@ async function seedBulk() {
       tId: C14,
       tEmail: "diego.torres@test.com",
       tName: "Diego Torres",
-      subject: "Platform engineer — cloud architecture",
+      subject: "Platform engineer â€” cloud architecture",
       isEmail: false,
       jId: BJ[2],
       jTitle: "Platform Engineer",
@@ -3167,7 +3167,7 @@ async function seedBulk() {
       tId: C16,
       tEmail: "sarah.mitchell@test.com",
       tName: "Sarah Mitchell",
-      subject: "Python backend — Django/FastAPI",
+      subject: "Python backend â€” Django/FastAPI",
       isEmail: false,
       jId: BJ[1],
       jTitle: "Backend Python Engineer",
@@ -3193,7 +3193,7 @@ async function seedBulk() {
       tId: C21,
       tEmail: "patrick.obrien@test.com",
       tName: "Patrick O'Brien",
-      subject: "Rust systems — networking stack",
+      subject: "Rust systems â€” networking stack",
       isEmail: false,
       jId: BJ[7],
       jTitle: "Rust Systems Programmer",
@@ -3224,7 +3224,7 @@ async function seedBulk() {
       jId: BJ[5],
       jTitle: "Kubernetes Platform Lead",
     },
-    // Vendor → candidate EMAILS
+    // Vendor â†’ candidate EMAILS
     {
       sId: ADMIN_VENDOR,
       sName: "Admin Vendor",
@@ -3246,12 +3246,12 @@ async function seedBulk() {
       tId: C12,
       tEmail: "marcus.thompson@test.com",
       tName: "Marcus Thompson",
-      subject: "Java role — compensation details",
+      subject: "Java role â€” compensation details",
       isEmail: true,
       jId: BJ[4],
       jTitle: "Senior Java Microservices Developer",
     },
-    // Candidate → Vendor POKES
+    // Candidate â†’ Vendor POKES
     {
       sId: C11,
       sName: "Anika Patel",
@@ -3275,7 +3275,7 @@ async function seedBulk() {
       tVendorId: ADMIN_VENDOR,
       tEmail: "admin@vendor.com",
       tName: "Admin Vendor",
-      subject: "Platform Engineer — very interested",
+      subject: "Platform Engineer â€” very interested",
       isEmail: false,
       jId: BJ[2],
       jTitle: "Platform Engineer",
@@ -3289,7 +3289,7 @@ async function seedBulk() {
       tVendorId: ADMIN_VENDOR,
       tEmail: "admin@vendor.com",
       tName: "Admin Vendor",
-      subject: "Python backend — availability",
+      subject: "Python backend â€” availability",
       isEmail: false,
       jId: BJ[1],
       jTitle: "Backend Python Engineer",
@@ -3303,7 +3303,7 @@ async function seedBulk() {
       tVendorId: ADMIN_VENDOR,
       tEmail: "admin@vendor.com",
       tName: "Admin Vendor",
-      subject: "Rust role — portfolio and rates",
+      subject: "Rust role â€” portfolio and rates",
       isEmail: false,
       jId: BJ[7],
       jTitle: "Rust Systems Programmer",
@@ -3317,13 +3317,13 @@ async function seedBulk() {
       tVendorId: ADMIN_VENDOR,
       tEmail: "admin@vendor.com",
       tName: "Admin Vendor",
-      subject: "NLP position — Ph.D. research",
+      subject: "NLP position â€” Ph.D. research",
       isEmail: false,
       jId: BJ[16],
       jTitle: "NLP Research Engineer",
     },
-    // (Marketer→Vendor pokes already exist in base seed — skipped to avoid dup key)
-    // Candidate → Vendor EMAILS
+    // (Marketerâ†’Vendor pokes already exist in base seed â€” skipped to avoid dup key)
+    // Candidate â†’ Vendor EMAILS
     {
       sId: C12,
       sName: "Marcus Thompson",
@@ -3333,7 +3333,7 @@ async function seedBulk() {
       tVendorId: ADMIN_VENDOR,
       tEmail: "admin@vendor.com",
       tName: "Admin Vendor",
-      subject: "Re: Java role — resume attached",
+      subject: "Re: Java role â€” resume attached",
       isEmail: true,
       jId: BJ[4],
       jTitle: "Senior Java Microservices Developer",
@@ -3347,7 +3347,7 @@ async function seedBulk() {
       tVendorId: ADMIN_VENDOR,
       tEmail: "admin@vendor.com",
       tName: "Admin Vendor",
-      subject: "AI/LLM — published papers",
+      subject: "AI/LLM â€” published papers",
       isEmail: true,
       jId: BJ[6],
       jTitle: "AI / LLM Engineer",
@@ -3371,10 +3371,10 @@ async function seedBulk() {
       jobTitle: p.jTitle,
     })),
   );
-  console.log(`  ✓ Created ${pokes.length} poke records`);
+  console.log(`  âœ“ Created ${pokes.length} poke records`);
 
   /* ================================================================ */
-  /*  POKE LOGS — monthly usage for new candidates                     */
+  /*  POKE LOGS â€” monthly usage for new candidates                     */
   /* ================================================================ */
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -3386,10 +3386,10 @@ async function seedBulk() {
       count: Math.floor(Math.random() * 4) + 1,
     })),
   );
-  console.log(`  ✓ Created ${bulkLogs.length} poke logs`);
+  console.log(`  âœ“ Created ${bulkLogs.length} poke logs`);
 
   /* ================================================================ */
-  /*  INTERVIEW INVITES — 10 upcoming interviews                       */
+  /*  INTERVIEW INVITES â€” 10 upcoming interviews                       */
   /* ================================================================ */
   const interviews = await InterviewInvite.insertMany([
     {
@@ -3421,7 +3421,7 @@ async function seedBulk() {
       interviewTime: "2:00 PM CST",
       interviewType: "video",
       interviewLink: "https://meet.example.com/java-marcus",
-      notes: "System design — Kafka + microservices",
+      notes: "System design â€” Kafka + microservices",
       status: "accepted",
     },
     {
@@ -3469,7 +3469,7 @@ async function seedBulk() {
       interviewTime: "3:00 PM EST",
       interviewType: "phone",
       interviewLink: "",
-      notes: "Phone screen — Django/FastAPI",
+      notes: "Phone screen â€” Django/FastAPI",
       status: "pending",
     },
     {
@@ -3553,12 +3553,12 @@ async function seedBulk() {
       status: "accepted",
     },
   ]);
-  console.log(`  ✓ Created ${interviews.length} interview invites`);
+  console.log(`  âœ“ Created ${interviews.length} interview invites`);
 
   /* ================================================================ */
   /*  Summary                                                          */
   /* ================================================================ */
-  console.log("\n✅ Bulk jobs seed complete!");
+  console.log("\nâœ… Bulk jobs seed complete!");
   console.log(
     `   ${bulkJobs.length} jobs, ${profiles.length} profiles, ${applications.length} applications`,
   );

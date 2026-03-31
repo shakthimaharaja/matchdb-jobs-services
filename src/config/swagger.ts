@@ -7,7 +7,7 @@ const options: swaggerJsdoc.Options = {
       title: "MatchDB Jobs Services API",
       version: "1.0.0",
       description:
-        "Jobs, Candidate Profiles, Applications & Matching API for the MatchDB platform. Handles job postings, candidate profiles, skill-based matching, resume generation, and vendor–candidate interactions.",
+        "Jobs, Candidate Profiles, Applications, Matching, Employer RBAC & Company Admin API for the MatchDB platform. Handles job postings, candidate profiles, skill-based matching, resume generation, employer operations, company user management, and candidate interactions.",
       contact: { name: "MatchDB Team" },
     },
     servers: [
@@ -178,8 +178,8 @@ const options: swaggerJsdoc.Options = {
           properties: {
             id: { type: "string" },
             name: { type: "string" },
-            marketer_id: { type: "string" },
-            marketer_email: { type: "string" },
+            uid: { type: "string" },
+            employer_email: { type: "string" },
             created_at: { type: "string", format: "date-time" },
           },
         },
@@ -389,6 +389,87 @@ const options: swaggerJsdoc.Options = {
           type: "object",
           properties: {
             error: { type: "string" },
+          },
+        },
+        // ── RBAC ──────────────────────────────────────────────
+        CompanyAdmin: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            companyId: { type: "string" },
+            companyName: { type: "string" },
+            adminUserId: { type: "string" },
+            adminEmail: { type: "string" },
+            adminName: { type: "string" },
+            subscriptionPlanId: { type: "string", nullable: true },
+            seatLimit: { type: "number" },
+            seatsUsed: { type: "number" },
+          },
+        },
+        CompanyUser: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            companyId: { type: "string" },
+            userId: { type: "string" },
+            workerId: { type: "string" },
+            email: { type: "string" },
+            fullName: { type: "string" },
+            phone: { type: "string" },
+            designation: { type: "string" },
+            role: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
+            department: { type: "string", enum: ["accounts", "immigration", "placement"], nullable: true },
+            permissions: { type: "array", items: { type: "string" } },
+            status: { type: "string", enum: ["active", "invited", "deactivated"] },
+            onlineStatus: { type: "string", enum: ["online", "away", "offline"] },
+            joinedAt: { type: "string", format: "date-time" },
+          },
+        },
+        EmployeeInvitation: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            companyId: { type: "string" },
+            invitedByAdminId: { type: "string" },
+            inviteeEmail: { type: "string" },
+            inviteeName: { type: "string" },
+            assignedRole: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
+            assignedDepartment: { type: "string", nullable: true },
+            token: { type: "string" },
+            status: { type: "string", enum: ["pending", "accepted", "expired", "revoked"] },
+            expiresAt: { type: "string", format: "date-time" },
+            usedAt: { type: "string", format: "date-time", nullable: true },
+          },
+        },
+        SubscriptionPlan: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
+            slug: { type: "string" },
+            maxJobPostings: { type: "number", nullable: true },
+            maxCandidates: { type: "number", nullable: true },
+            maxWorkers: { type: "number", nullable: true },
+            priceMonthly: { type: "number" },
+            priceYearly: { type: "number" },
+            extraAdminFee: { type: "number" },
+            isActive: { type: "boolean" },
+          },
+        },
+        ClientCompany: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
+            employerId: { type: "string" },
+          },
+        },
+        VendorCompany: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
+            employerId: { type: "string" },
           },
         },
       },
@@ -1031,8 +1112,8 @@ const options: swaggerJsdoc.Options = {
       // ===== MARKETER ROUTES =======================================
       "/marketer/stats": {
         get: {
-          tags: ["Marketer"],
-          summary: "Get marketer dashboard stats",
+          tags: ["Employer"],
+          summary: "Get employer dashboard stats",
           security: [{ BearerAuth: [] }],
           responses: {
             200: {
@@ -1045,7 +1126,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/jobs": {
         get: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "List all managed jobs (paginated)",
           security: [{ BearerAuth: [] }],
           parameters: [
@@ -1074,7 +1155,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/profiles": {
         get: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "List all managed candidate profiles (paginated)",
           security: [{ BearerAuth: [] }],
           parameters: [
@@ -1103,8 +1184,8 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/company": {
         get: {
-          tags: ["Marketer"],
-          summary: "Get marketer's company",
+          tags: ["Employer"],
+          summary: "Get employer's company",
           security: [{ BearerAuth: [] }],
           responses: {
             200: {
@@ -1119,7 +1200,7 @@ const options: swaggerJsdoc.Options = {
           },
         },
         post: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Register a company",
           security: [{ BearerAuth: [] }],
           requestBody: {
@@ -1150,7 +1231,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/company-summary": {
         get: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary:
             "Get full company summary (candidates, projects, financials, totals)",
           security: [{ BearerAuth: [] }],
@@ -1165,7 +1246,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/candidates": {
         get: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "List company roster candidates",
           security: [{ BearerAuth: [] }],
           responses: {
@@ -1184,7 +1265,7 @@ const options: swaggerJsdoc.Options = {
           },
         },
         post: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Add candidate to company roster",
           security: [{ BearerAuth: [] }],
           requestBody: {
@@ -1219,7 +1300,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/candidates/{id}/detail": {
         get: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary:
             "Get full candidate detail (profile, projects, forwards, vendor activity)",
           security: [{ BearerAuth: [] }],
@@ -1243,7 +1324,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/candidates/{id}": {
         delete: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Remove candidate from roster",
           security: [{ BearerAuth: [] }],
           parameters: [
@@ -1262,7 +1343,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/candidates/{id}/invite": {
         post: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Send invite to a roster candidate",
           security: [{ BearerAuth: [] }],
           parameters: [
@@ -1291,7 +1372,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/forward": {
         post: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Forward a job opening to a roster candidate",
           security: [{ BearerAuth: [] }],
           requestBody: {
@@ -1329,7 +1410,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/forward-with-email": {
         post: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Forward a job opening with email notification",
           security: [{ BearerAuth: [] }],
           requestBody: {
@@ -1359,7 +1440,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/forwarded": {
         get: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "List all forwarded openings",
           security: [{ BearerAuth: [] }],
           responses: {
@@ -1380,7 +1461,7 @@ const options: swaggerJsdoc.Options = {
       },
       "/marketer/forwarded/{id}/status": {
         patch: {
-          tags: ["Marketer"],
+          tags: ["Employer"],
           summary: "Update forwarded opening status",
           security: [{ BearerAuth: [] }],
           parameters: [
@@ -1893,6 +1974,362 @@ const options: swaggerJsdoc.Options = {
             403: { description: "Not the invitee" },
             404: { description: "Not found" },
             409: { description: "Already responded" },
+          },
+        },
+      },
+      // ===== EMPLOYER FINANCIALS =====================================
+      "/vendor/financials/summary": {
+        get: {
+          tags: ["Employer"],
+          summary: "Get employer-side financial summary",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Employer financial summary" },
+            401: { description: "Unauthorized" },
+          },
+        },
+      },
+      // ===== CLIENT/VENDOR COMPANIES ===============================
+      "/marketer/client-companies": {
+        get: {
+          tags: ["Employer"],
+          summary: "List client companies for the employer",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Client companies",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/ClientCompany" },
+                  },
+                },
+              },
+            },
+            401: { description: "Unauthorized" },
+          },
+        },
+      },
+      "/marketer/vendor-companies": {
+        get: {
+          tags: ["Employer"],
+          summary: "List vendor companies for the employer",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Vendor companies",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/VendorCompany" },
+                  },
+                },
+              },
+            },
+            401: { description: "Unauthorized" },
+          },
+        },
+      },
+      // ===== ADMIN ROUTES (RBAC) ===================================
+      "/admin/plans": {
+        get: {
+          tags: ["Admin"],
+          summary: "List available subscription plans",
+          responses: {
+            200: {
+              description: "Active subscription plans",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/SubscriptionPlan" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/admin/setup": {
+        post: {
+          tags: ["Admin"],
+          summary: "One-time company admin onboarding",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["adminName", "companyName"],
+                  properties: {
+                    adminName: { type: "string" },
+                    adminPhone: { type: "string" },
+                    adminDesignation: { type: "string" },
+                    companyName: { type: "string" },
+                    companyLegalName: { type: "string" },
+                    ein: { type: "string" },
+                    companyPhone: { type: "string" },
+                    companyEmail: { type: "string" },
+                    companyWebsite: { type: "string" },
+                    industry: { type: "string" },
+                    companySize: { type: "string" },
+                    subscriptionPlanSlug: { type: "string", default: "starter" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: "Company and admin created" },
+            400: { description: "Validation error" },
+            401: { description: "Unauthorized" },
+            409: { description: "Admin already exists" },
+          },
+        },
+      },
+      "/admin/me": {
+        get: {
+          tags: ["Admin"],
+          summary: "Get current user's company context, role, and permissions",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Company context with companyAdmin, companyUser, role, permissions",
+            },
+            401: { description: "Unauthorized" },
+          },
+        },
+      },
+      "/admin/invite": {
+        post: {
+          tags: ["Admin"],
+          summary: "Send employee invitation email",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email", "role"],
+                  properties: {
+                    email: { type: "string", format: "email" },
+                    name: { type: "string" },
+                    role: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
+                    department: { type: "string", enum: ["accounts", "immigration", "placement"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Invitation sent",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/EmployeeInvitation" },
+                },
+              },
+            },
+            400: { description: "Validation error or seat limit reached" },
+            401: { description: "Unauthorized" },
+            403: { description: "Not admin" },
+            409: { description: "Pending invite already exists" },
+          },
+        },
+      },
+      "/admin/invitations": {
+        get: {
+          tags: ["Admin"],
+          summary: "List sent invitations",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Invitation list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/EmployeeInvitation" },
+                  },
+                },
+              },
+            },
+            401: { description: "Unauthorized" },
+          },
+        },
+      },
+      "/admin/invitations/{id}": {
+        delete: {
+          tags: ["Admin"],
+          summary: "Revoke a pending invitation",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: { description: "Invitation revoked" },
+            401: { description: "Unauthorized" },
+            403: { description: "Not admin" },
+            404: { description: "Not found" },
+          },
+        },
+      },
+      "/admin/register/{token}": {
+        post: {
+          tags: ["Admin"],
+          summary: "Register via employee invite token",
+          parameters: [
+            {
+              name: "token",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email", "password", "fullName"],
+                  properties: {
+                    email: { type: "string", format: "email" },
+                    password: { type: "string" },
+                    fullName: { type: "string" },
+                    phone: { type: "string" },
+                    designation: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: "User registered and added to company" },
+            400: { description: "Invalid or expired token" },
+            409: { description: "Email already registered" },
+          },
+        },
+      },
+      "/admin/users": {
+        get: {
+          tags: ["Admin"],
+          summary: "List company users (RBAC-filtered)",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Company users list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/CompanyUser" },
+                  },
+                },
+              },
+            },
+            401: { description: "Unauthorized" },
+          },
+        },
+      },
+      "/admin/users/{id}/role": {
+        patch: {
+          tags: ["Admin"],
+          summary: "Change a user's role and department",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["role"],
+                  properties: {
+                    role: { type: "string", enum: ["admin", "manager", "vendor", "marketer"] },
+                    department: { type: "string", enum: ["accounts", "immigration", "placement"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Role updated" },
+            401: { description: "Unauthorized" },
+            403: { description: "Not admin" },
+            404: { description: "User not found" },
+          },
+        },
+      },
+      "/admin/users/{id}/status": {
+        patch: {
+          tags: ["Admin"],
+          summary: "Activate or deactivate a user",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["status"],
+                  properties: {
+                    status: { type: "string", enum: ["active", "deactivated"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Status updated" },
+            401: { description: "Unauthorized" },
+            403: { description: "Not admin" },
+            404: { description: "User not found" },
+          },
+        },
+      },
+      "/admin/active-users": {
+        get: {
+          tags: ["Admin"],
+          summary: "List active users with online status",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Active users with online/away/offline status",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/CompanyUser" },
+                  },
+                },
+              },
+            },
+            401: { description: "Unauthorized" },
           },
         },
       },

@@ -1,19 +1,24 @@
 /**
  * rbac.middleware.ts
  *
- * Role-Based Access Control middleware for the Company Admin system.
- * Works with the existing requireAuth chain and adds:
- *   - requireRole(...)   → checks the user's company role
+ * Role-Based Access Control middleware for the Employer portal.
+ *
+ * Roles: admin, manager, vendor, marketer (scoped by department).
+ * Works with requireAuth chain and adds:
+ *   - resolveCompanyUser  → attaches company context
+ *   - requireRole(...)    → checks the user's company role
  *   - requirePermission(...) → checks granular permission strings
- *   - requireSeatAvailable → blocks if company seat limit is reached
+ *   - requireSeatAvailable → blocks if company worker limit is reached
  */
 import { Request, Response, NextFunction } from "express";
 import {
   CompanyUser,
   ROLE_PERMISSIONS,
+  resolveRoleKey,
   type UserRole,
 } from "../models/CompanyUser";
 import { CompanyAdmin } from "../models/CompanyAdmin";
+import { SubscriptionPlan } from "../models/SubscriptionPlan";
 import { requireAuth, type JwtUser } from "./auth.middleware";
 
 // Extend the Request to include company context after middleware runs
@@ -23,6 +28,7 @@ declare global {
       companyUser?: {
         companyId: string;
         role: UserRole;
+        department: string | null;
         permissions: string[];
         companyUserId: string;
       };
@@ -54,13 +60,15 @@ export function resolveCompanyUser(
         return;
       }
 
+      const roleKey = resolveRoleKey(cu.role, cu.department);
       req.companyUser = {
         companyId: cu.companyId,
         role: cu.role,
+        department: cu.department ?? null,
         permissions:
           cu.permissions.length > 0
             ? cu.permissions
-            : ROLE_PERMISSIONS[cu.role] || [],
+            : ROLE_PERMISSIONS[roleKey] || [],
         companyUserId: cu._id,
       };
 
@@ -73,7 +81,7 @@ export function resolveCompanyUser(
 
 /**
  * Factory: require the calling user to have one of the specified roles.
- * Usage: requireRole("admin", "marketing")
+ * Usage: requireRole("admin", "manager")
  */
 export function requireRole(...roles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -92,8 +100,8 @@ export function requireRole(...roles: UserRole[]) {
 }
 
 /**
- * Factory: require the calling user to have a specific permission string.
- * Usage: requirePermission("invite:candidate")
+ * Factory: require the calling user to have ALL specified permission strings.
+ * Usage: requirePermission("finance", "candidates")
  */
 export function requirePermission(...perms: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -119,8 +127,8 @@ export function requirePermission(...perms: string[]) {
 }
 
 /**
- * Middleware: block the request if the company has reached its seat limit.
- * Used before creating new employee invitations.
+ * Middleware: block the request if the company has reached its worker limit
+ * (based on subscription plan). Used before creating new employee invitations.
  */
 export function requireSeatAvailable(
   req: Request,
@@ -143,13 +151,30 @@ export function requireSeatAvailable(
         return;
       }
 
-      if (admin.seatsUsed >= admin.seatLimit) {
+      // If a plan is assigned, check against plan limits
+      if (admin.subscriptionPlanId) {
+        const plan = await SubscriptionPlan.findById(
+          admin.subscriptionPlanId,
+        ).lean();
+        if (plan && plan.maxWorkers !== null) {
+          if (admin.seatsUsed >= plan.maxWorkers) {
+            res.status(403).json({
+              error: "Worker limit reached",
+              seatsUsed: admin.seatsUsed,
+              maxWorkers: plan.maxWorkers,
+              planName: plan.name,
+              message: `Your ${plan.name} plan allows ${plan.maxWorkers} workers. Please upgrade to add more team members.`,
+            });
+            return;
+          }
+        }
+      } else if (admin.seatsUsed >= admin.seatLimit) {
+        // Fallback to static seatLimit if no plan assigned
         res.status(403).json({
           error: "Seat limit reached",
           seatsUsed: admin.seatsUsed,
           seatLimit: admin.seatLimit,
-          subscriptionPlan: admin.subscriptionPlan,
-          message: `Your ${admin.subscriptionPlan} plan allows ${admin.seatLimit} seats. Please upgrade to add more employees.`,
+          message: `Your plan allows ${admin.seatLimit} seats. Please upgrade to add more employees.`,
         });
         return;
       }

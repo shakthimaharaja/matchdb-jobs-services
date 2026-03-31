@@ -9,7 +9,8 @@ export interface IEmployeeInvitation {
   invitedByAdminId: string;
   inviteeEmail: string;
   inviteeName: string;
-  assignedRole: string;
+  assignedRole: string; // "admin" | "manager" | "vendor" | "marketer"
+  assignedDepartment: string | null; // only if role = marketer
   token: string;
   status: InviteStatus;
   expiresAt: Date;
@@ -28,7 +29,16 @@ const EmployeeInvitationSchema = new Schema<IEmployeeInvitation>(
     invitedByAdminId: { type: String, required: true },
     inviteeEmail: { type: String, required: true },
     inviteeName: { type: String, default: "" },
-    assignedRole: { type: String, default: "viewer" },
+    assignedRole: {
+      type: String,
+      enum: ["admin", "manager", "vendor", "marketer"],
+      default: "vendor",
+    },
+    assignedDepartment: {
+      type: String,
+      enum: ["accounts", "immigration", "placement", null],
+      default: null,
+    },
     token: { type: String, default: () => randomUUID(), unique: true },
     status: {
       type: String,
@@ -37,7 +47,7 @@ const EmployeeInvitationSchema = new Schema<IEmployeeInvitation>(
     },
     expiresAt: {
       type: Date,
-      default: () => new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h
+      default: () => new Date(Date.now() + 72 * 60 * 60 * 1000), // 72h
     },
     usedAt: { type: Date, default: null },
   },

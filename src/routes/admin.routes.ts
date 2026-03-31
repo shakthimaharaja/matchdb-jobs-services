@@ -2,27 +2,30 @@
  * admin.routes.ts
  *
  * Company Admin endpoints:
- *  - Company onboarding & admin dashboard
+ *  - Company onboarding (expanded with full company details)
+ *  - Admin dashboard
  *  - Employee invitation (send, list, revoke)
  *  - Employee registration via token
  *  - User management (list, role change, status change)
  *  - Active users panel
+ *  - Subscription plan management
  */
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import {
-  CompanyAdmin,
-  PLAN_SEAT_LIMITS,
-  type SubscriptionPlan,
-} from "../models/CompanyAdmin";
+import { CompanyAdmin } from "../models/CompanyAdmin";
+import { Company } from "../models/Company";
 import { EmployeeInvitation } from "../models/EmployeeInvitation";
 import {
   CompanyUser,
   ROLE_PERMISSIONS,
+  resolveRoleKey,
   type UserRole,
+  type MarketerDepartment,
 } from "../models/CompanyUser";
+import { SubscriptionPlan, DEFAULT_PLANS } from "../models/SubscriptionPlan";
 import { requireAuth } from "../middleware/auth.middleware";
+import { getNextId } from "../models/Counter";
 import {
   requireRole,
   requirePermission,
@@ -36,13 +39,58 @@ const router = Router();
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// GET /plans — List available subscription plans
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get("/plans", async (_req: Request, res: Response) => {
+  try {
+    // Ensure default plans exist (idempotent upsert)
+    for (const p of DEFAULT_PLANS) {
+      await SubscriptionPlan.updateOne(
+        { slug: p.slug },
+        { $setOnInsert: p },
+        { upsert: true },
+      );
+    }
+    const plans = await SubscriptionPlan.find({ isActive: true })
+      .sort({ priceMonthly: 1 })
+      .lean();
+    res.json(plans);
+  } catch (err) {
+    console.error("[admin/plans]", err);
+    res.status(500).json({ error: "Failed to load plans" });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // POST /setup — One-time company admin onboarding
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const addressSchema = z.object({
+  street: z.string().max(200).default(""),
+  city: z.string().max(100).default(""),
+  state: z.string().max(100).default(""),
+  zip: z.string().max(20).default(""),
+  country: z.string().max(100).default("US"),
+});
+
 const setupSchema = z.object({
-  companyName: z.string().min(1).max(200),
+  // Admin details
   adminName: z.string().min(1).max(100),
-  subscriptionPlan: z.enum(["basic", "pro"]).default("basic"),
+  adminPhone: z.string().max(20).default(""),
+  adminDesignation: z.string().max(100).default(""),
+  // Company details
+  companyName: z.string().min(1).max(200),
+  companyLegalName: z.string().max(200).default(""),
+  ein: z.string().max(20).default(""),
+  companyAddress: addressSchema.default({}),
+  companyPhone: z.string().max(20).default(""),
+  companyEmail: z.string().email().optional().or(z.literal("")),
+  companyWebsite: z.string().max(255).default(""),
+  industry: z.string().max(100).default(""),
+  companySize: z.string().max(20).default(""),
+  // Subscription
+  subscriptionPlanSlug: z.string().default("starter"),
 });
 
 router.post("/setup", requireAuth, async (req: Request, res: Response) => {
@@ -61,29 +109,66 @@ router.post("/setup", requireAuth, async (req: Request, res: Response) => {
     }
 
     const body = setupSchema.parse(req.body);
-    const plan = body.subscriptionPlan as SubscriptionPlan;
+
+    // Resolve the subscription plan
+    const plan = await SubscriptionPlan.findOne({
+      slug: body.subscriptionPlanSlug,
+      isActive: true,
+    }).lean();
+
+    const companyId = new (
+      await import("mongoose")
+    ).default.Types.ObjectId().toString();
+
+    // Generate unique display IDs
+    const companyDisplayId = await getNextId("company");
+    const adminWorkerId = await getNextId("worker");
+
+    // Create Company record
+    await Company.create({
+      _id: companyId,
+      displayId: companyDisplayId,
+      name: body.companyName,
+      legalName: body.companyLegalName,
+      ein: body.ein,
+      address: body.companyAddress,
+      phone: body.companyPhone,
+      email: body.companyEmail || "",
+      website: body.companyWebsite,
+      industry: body.industry,
+      companySize: body.companySize,
+      adminUserId: jwt.userId,
+      adminEmail: jwt.email,
+      subscriptionPlanId: plan?._id ?? null,
+      subscriptionStatus: plan ? "active" : "none",
+      billingCycle: "monthly",
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    });
 
     // Create company admin record
     const admin = await CompanyAdmin.create({
-      companyId: new (
-        await import("mongoose")
-      ).default.Types.ObjectId().toString(),
+      companyId,
       companyName: body.companyName,
       adminUserId: jwt.userId,
       adminEmail: jwt.email,
       adminName: body.adminName,
-      subscriptionPlan: plan,
-      seatLimit: PLAN_SEAT_LIMITS[plan],
+      subscriptionPlanId: plan?._id ?? null,
+      seatLimit: plan?.maxWorkers ?? 3,
       seatsUsed: 1, // admin counts as 1 seat
     });
 
     // Create the admin's CompanyUser record
     await CompanyUser.create({
-      companyId: admin.companyId,
+      companyId,
       userId: jwt.userId,
+      workerId: adminWorkerId,
       email: jwt.email,
       fullName: body.adminName,
+      phone: body.adminPhone,
+      designation: body.adminDesignation,
       role: "admin",
+      department: null,
       permissions: ROLE_PERMISSIONS.admin,
       status: "active",
       onlineStatus: "online",
@@ -91,9 +176,11 @@ router.post("/setup", requireAuth, async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      companyId: admin.companyId,
-      companyName: admin.companyName,
-      subscriptionPlan: admin.subscriptionPlan,
+      companyId,
+      companyName: body.companyName,
+      subscriptionPlan: plan
+        ? { id: plan._id, name: plan.name, slug: plan.slug }
+        : null,
       seatLimit: admin.seatLimit,
       seatsUsed: admin.seatsUsed,
     });
@@ -123,6 +210,11 @@ router.get(
         return;
       }
 
+      const company = await Company.findById(companyId).lean();
+      const plan = admin.subscriptionPlanId
+        ? await SubscriptionPlan.findById(admin.subscriptionPlanId).lean()
+        : null;
+
       const activeUsers = await CompanyUser.countDocuments({
         companyId,
         status: "active",
@@ -135,11 +227,33 @@ router.get(
       res.json({
         companyId: admin.companyId,
         companyName: admin.companyName,
-        subscriptionPlan: admin.subscriptionPlan,
-        seatLimit: admin.seatLimit,
+        company: company
+          ? {
+              name: company.name,
+              legalName: company.legalName,
+              industry: company.industry,
+              companySize: company.companySize,
+              logoUrl: company.logoUrl,
+            }
+          : null,
+        subscriptionPlan: plan
+          ? {
+              id: plan._id,
+              name: plan.name,
+              slug: plan.slug,
+              maxJobPostings: plan.maxJobPostings,
+              maxCandidates: plan.maxCandidates,
+              maxWorkers: plan.maxWorkers,
+              priceMonthly: plan.priceMonthly,
+            }
+          : null,
+        seatLimit: plan?.maxWorkers ?? admin.seatLimit,
         seatsUsed: admin.seatsUsed,
         activeUsers,
         pendingInvites,
+        role: req.companyUser!.role,
+        department: req.companyUser!.department,
+        permissions: req.companyUser!.permissions,
       });
     } catch (err) {
       console.error("[admin/dashboard]", err);
@@ -155,9 +269,11 @@ router.get(
 const inviteSchema = z.object({
   email: z.string().email(),
   name: z.string().max(100).default(""),
-  role: z
-    .enum(["finance", "hr", "operations", "marketing", "viewer"])
-    .default("viewer"),
+  role: z.enum(["vendor", "marketer", "manager", "admin"]).default("vendor"),
+  department: z
+    .enum(["accounts", "immigration", "placement"])
+    .optional()
+    .nullable(),
 });
 
 router.post(
@@ -169,6 +285,14 @@ router.post(
       const body = inviteSchema.parse(req.body);
       const { companyId } = req.companyUser!;
 
+      // Validate: marketer role requires a department
+      if (body.role === "marketer" && !body.department) {
+        res.status(400).json({
+          error: "Department is required for marketer role",
+        });
+        return;
+      }
+
       // Check if user is already a member
       const existingUser = await CompanyUser.findOne({
         companyId,
@@ -177,6 +301,22 @@ router.post(
       if (existingUser) {
         res.status(409).json({ error: "User is already a company member" });
         return;
+      }
+
+      // If inviting an admin, check extra admin billing
+      if (body.role === "admin") {
+        const adminCount = await CompanyUser.countDocuments({
+          companyId,
+          role: "admin",
+          status: "active",
+        });
+        if (adminCount >= 1) {
+          // More than 1 admin → charge extra
+          await Company.updateOne(
+            { _id: companyId },
+            { $inc: { extraAdminCount: 1 } },
+          );
+        }
       }
 
       // Invalidate any existing pending invite for this email
@@ -193,6 +333,7 @@ router.post(
         inviteeEmail: body.email,
         inviteeName: body.name,
         assignedRole: body.role,
+        assignedDepartment: body.role === "marketer" ? body.department : null,
       });
 
       // Send email
@@ -335,15 +476,22 @@ router.post("/register/:token", async (req: Request, res: Response) => {
 
     // Create CompanyUser
     const role = invite.assignedRole as UserRole;
+    const dept = (invite as any)
+      .assignedDepartment as MarketerDepartment | null;
+    const roleKey = resolveRoleKey(role, dept);
+    const workerId = await getNextId("worker");
     await CompanyUser.create({
       companyId: invite.companyId,
       userId: body.userId,
+      workerId,
       email: body.email,
       fullName: body.fullName,
       role,
-      permissions: ROLE_PERMISSIONS[role] || [],
+      department: dept,
+      permissions: ROLE_PERMISSIONS[roleKey] || [],
       status: "active",
       invitationId: invite._id,
+      invitedBy: invite.invitedByAdminId,
       joinedAt: new Date(),
     });
 
@@ -430,7 +578,11 @@ router.get(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const roleUpdateSchema = z.object({
-  role: z.enum(["admin", "finance", "hr", "operations", "marketing", "viewer"]),
+  role: z.enum(["admin", "manager", "vendor", "marketer"]),
+  department: z
+    .enum(["accounts", "immigration", "placement"])
+    .optional()
+    .nullable(),
 });
 
 router.put(
@@ -441,13 +593,56 @@ router.put(
       const { companyId } = req.companyUser!;
       const body = roleUpdateSchema.parse(req.body);
       const newRole = body.role as UserRole;
+      const dept =
+        newRole === "marketer"
+          ? (body.department as MarketerDepartment | null)
+          : null;
+
+      if (newRole === "marketer" && !dept) {
+        res.status(400).json({
+          error: "Department is required for marketer role",
+        });
+        return;
+      }
+
+      const roleKey = resolveRoleKey(newRole, dept);
+
+      // Handle admin count for billing
+      const target = await CompanyUser.findOne({
+        _id: req.params.id,
+        companyId,
+      }).lean();
+      if (target) {
+        // If changing TO admin, increment extra admin count
+        if (newRole === "admin" && target.role !== "admin") {
+          const adminCount = await CompanyUser.countDocuments({
+            companyId,
+            role: "admin",
+            status: "active",
+          });
+          if (adminCount >= 1) {
+            await Company.updateOne(
+              { _id: companyId },
+              { $inc: { extraAdminCount: 1 } },
+            );
+          }
+        }
+        // If changing FROM admin, decrement extra admin count
+        if (target.role === "admin" && newRole !== "admin") {
+          await Company.updateOne(
+            { _id: companyId, extraAdminCount: { $gt: 0 } },
+            { $inc: { extraAdminCount: -1 } },
+          );
+        }
+      }
 
       const user = await CompanyUser.findOneAndUpdate(
         { _id: req.params.id, companyId },
         {
           $set: {
             role: newRole,
-            permissions: ROLE_PERMISSIONS[newRole] || [],
+            department: dept,
+            permissions: ROLE_PERMISSIONS[roleKey] || [],
           },
         },
         { new: true },
@@ -461,6 +656,7 @@ router.put(
       res.json({
         id: user._id,
         role: user.role,
+        department: user.department,
         permissions: user.permissions,
       });
     } catch (err: any) {
@@ -481,7 +677,7 @@ router.put(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const statusUpdateSchema = z.object({
-  status: z.enum(["active", "inactive", "suspended"]),
+  status: z.enum(["active", "deactivated"]),
 });
 
 router.put(
@@ -513,7 +709,7 @@ router.put(
       }
 
       // Adjust seat count
-      if (body.status === "inactive" || body.status === "suspended") {
+      if (body.status === "deactivated") {
         await CompanyAdmin.updateOne(
           { companyId, seatsUsed: { $gt: 0 } },
           { $inc: { seatsUsed: -1 } },
@@ -627,5 +823,263 @@ router.post(
     }
   },
 );
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /subscription/usage — Current usage vs plan limits
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get(
+  "/subscription/usage",
+  requireRole("admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const { companyId } = req.companyUser!;
+      const admin = await CompanyAdmin.findOne({ companyId }).lean();
+      if (!admin) {
+        res.status(404).json({ error: "Company not found" });
+        return;
+      }
+
+      const plan = admin.subscriptionPlanId
+        ? await SubscriptionPlan.findById(admin.subscriptionPlanId).lean()
+        : null;
+
+      const company = await Company.findById(companyId).lean();
+
+      // Count current usage
+      const { Job } = await import("../models/index");
+      const activeJobPostings = await Job.countDocuments({
+        vendorId: { $in: await CompanyUser.distinct("userId", { companyId }) },
+        isActive: true,
+      });
+
+      const { EmployerCandidate } = await import("../models/index");
+      const totalCandidates = await EmployerCandidate.countDocuments({
+        employerId: {
+          $in: await CompanyUser.distinct("userId", { companyId }),
+        },
+      });
+
+      const activeWorkers = await CompanyUser.countDocuments({
+        companyId,
+        status: "active",
+      });
+
+      const adminCount = await CompanyUser.countDocuments({
+        companyId,
+        role: "admin",
+        status: "active",
+      });
+
+      res.json({
+        plan: plan
+          ? { name: plan.name, slug: plan.slug }
+          : { name: "None", slug: "none" },
+        usage: {
+          jobPostings: activeJobPostings,
+          candidates: totalCandidates,
+          workers: activeWorkers,
+          adminCount,
+        },
+        limits: {
+          maxJobPostings: plan?.maxJobPostings ?? 0,
+          maxCandidates: plan?.maxCandidates ?? 0,
+          maxWorkers: plan?.maxWorkers ?? 0,
+        },
+        billing: {
+          extraAdminCount: company?.extraAdminCount ?? 0,
+          extraAdminFee: plan?.extraAdminFee ?? 20,
+          billingCycle: company?.billingCycle ?? "monthly",
+        },
+      });
+    } catch (err) {
+      console.error("[admin/subscription/usage]", err);
+      res.status(500).json({ error: "Failed to load usage" });
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PUT /subscription/select — Admin selects or upgrades a plan
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const selectPlanSchema = z.object({
+  planSlug: z.string().min(1),
+  billingCycle: z.enum(["monthly", "yearly"]).default("monthly"),
+});
+
+router.put(
+  "/subscription/select",
+  requireRole("admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const { companyId } = req.companyUser!;
+      const body = selectPlanSchema.parse(req.body);
+
+      const plan = await SubscriptionPlan.findOne({
+        slug: body.planSlug,
+        isActive: true,
+      }).lean();
+      if (!plan) {
+        res.status(404).json({ error: "Plan not found" });
+        return;
+      }
+
+      await Company.updateOne(
+        { _id: companyId },
+        {
+          $set: {
+            subscriptionPlanId: plan._id,
+            subscriptionStatus: "active",
+            billingCycle: body.billingCycle,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(
+              Date.now() +
+                (body.billingCycle === "yearly" ? 365 : 30) *
+                  24 *
+                  60 *
+                  60 *
+                  1000,
+            ),
+          },
+        },
+      );
+
+      await CompanyAdmin.updateOne(
+        { companyId },
+        {
+          $set: {
+            subscriptionPlanId: plan._id,
+            seatLimit: plan.maxWorkers ?? 999,
+          },
+        },
+      );
+
+      res.json({
+        plan: { id: plan._id, name: plan.name, slug: plan.slug },
+        billingCycle: body.billingCycle,
+        status: "active",
+      });
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        res
+          .status(400)
+          .json({ error: "Validation failed", details: err.errors });
+        return;
+      }
+      console.error("[admin/subscription/select]", err);
+      res.status(500).json({ error: "Failed to select plan" });
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /company — Company details
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get(
+  "/company",
+  requirePermission("company_settings"),
+  async (req: Request, res: Response) => {
+    try {
+      const company = await Company.findById(req.companyUser!.companyId).lean();
+      if (!company) {
+        res.status(404).json({ error: "Company not found" });
+        return;
+      }
+      res.json(company);
+    } catch (err) {
+      console.error("[admin/company]", err);
+      res.status(500).json({ error: "Failed to load company" });
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PUT /company — Update company details (Admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const companyUpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  legalName: z.string().max(200).optional(),
+  ein: z.string().max(20).optional(),
+  address: addressSchema.optional(),
+  phone: z.string().max(20).optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  website: z.string().max(255).optional(),
+  industry: z.string().max(100).optional(),
+  companySize: z.string().max(20).optional(),
+});
+
+router.put(
+  "/company",
+  requirePermission("company_settings"),
+  async (req: Request, res: Response) => {
+    try {
+      const body = companyUpdateSchema.parse(req.body);
+      const company = await Company.findByIdAndUpdate(
+        req.companyUser!.companyId,
+        { $set: body },
+        { new: true },
+      );
+      if (!company) {
+        res.status(404).json({ error: "Company not found" });
+        return;
+      }
+
+      // Sync company name to admin record if changed
+      if (body.name) {
+        await CompanyAdmin.updateOne(
+          { companyId: company._id },
+          { $set: { companyName: body.name } },
+        );
+      }
+
+      res.json(company);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        res
+          .status(400)
+          .json({ error: "Validation failed", details: err.errors });
+        return;
+      }
+      console.error("[admin/company]", err);
+      res.status(500).json({ error: "Failed to update company" });
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /me — Current user's company context (role, permissions, department)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get("/me", resolveCompanyUser, async (req: Request, res: Response) => {
+  try {
+    const cu = await CompanyUser.findById(
+      req.companyUser!.companyUserId,
+    ).lean();
+    if (!cu) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const company = await Company.findById(cu.companyId).lean();
+
+    res.json({
+      companyUserId: cu._id,
+      companyId: cu.companyId,
+      companyName: company?.name ?? "",
+      userId: cu.userId,
+      email: cu.email,
+      fullName: cu.fullName,
+      role: cu.role,
+      department: cu.department,
+      permissions: req.companyUser!.permissions,
+      status: cu.status,
+    });
+  } catch (err) {
+    console.error("[admin/me]", err);
+    res.status(500).json({ error: "Failed to load user context" });
+  }
+});
 
 export default router;

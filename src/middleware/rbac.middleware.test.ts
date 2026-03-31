@@ -20,37 +20,51 @@ vi.mock("../models/CompanyUser", () => ({
   },
   ROLE_PERMISSIONS: {
     admin: [
-      "users:manage",
-      "users:view",
-      "invite:employee",
-      "invite:candidate",
-      "finance:view",
-      "finance:manage",
-      "hr:view",
-      "hr:manage",
-      "operations:view",
-      "operations:manage",
-      "reports:view",
-      "settings:manage",
-      "candidates:view",
-      "candidates:manage",
+      "dashboard",
+      "job_postings",
+      "hiring_firing",
+      "candidates",
+      "workers",
+      "finance",
+      "immigration",
+      "projects",
+      "staffing",
+      "placement",
+      "subscription",
+      "invite_workers",
+      "manage_roles",
+      "company_settings",
     ],
-    finance: ["finance:view", "finance:manage", "reports:view"],
-    hr: ["hr:view", "hr:manage", "reports:view"],
-    operations: ["operations:view", "operations:manage", "reports:view"],
-    marketing: [
-      "invite:candidate",
-      "candidates:view",
-      "candidates:manage",
-      "reports:view",
+    manager: [
+      "dashboard",
+      "job_postings",
+      "hiring_firing",
+      "candidates",
+      "workers",
+      "projects",
+      "staffing",
+      "placement",
     ],
-    viewer: [
-      "finance:view",
-      "hr:view",
-      "operations:view",
-      "reports:view",
-      "candidates:view",
+    vendor: ["dashboard", "job_postings", "hiring_firing"],
+    marketer_accounts: [
+      "dashboard",
+      "finance",
+      "candidates",
+      "projects",
+      "staffing",
     ],
+    marketer_immigration: [
+      "dashboard",
+      "immigration",
+      "candidates",
+      "projects",
+      "staffing",
+    ],
+    marketer_placement: ["dashboard", "staffing", "placement"],
+  },
+  resolveRoleKey: (role: string, department?: string | null) => {
+    if (role === "marketer" && department) return `marketer_${department}`;
+    return role;
   },
 }));
 
@@ -60,14 +74,20 @@ vi.mock("../models/CompanyAdmin", () => ({
   },
 }));
 
+vi.mock("../models/SubscriptionPlan", () => ({
+  SubscriptionPlan: {
+    findById: () => ({ lean: () => null }),
+  },
+}));
+
 // Mock requireAuth to just call next() and set req.user
 vi.mock("./auth.middleware", () => ({
   requireAuth: (req: Request, _res: Response, next: NextFunction) => {
     req.user = {
       userId: "user-1",
       email: "test@test.com",
-      userType: "marketer",
-      plan: "marketer",
+      userType: "employer",
+      plan: "pro_plus",
       username: "test",
     };
     next();
@@ -134,7 +154,7 @@ describe("resolveCompanyUser", () => {
     expect(req.companyUser!.companyId).toBe("comp-1");
     expect(req.companyUser!.role).toBe("admin");
     // When permissions empty, ROLE_PERMISSIONS["admin"] is used
-    expect(req.companyUser!.permissions).toContain("users:manage");
+    expect(req.companyUser!.permissions).toContain("dashboard");
   });
 
   it("returns 403 when user has no active company membership", async () => {
@@ -171,7 +191,7 @@ describe("requireRole", () => {
       }),
     });
 
-    const middleware = requireRole("admin", "marketing");
+    const middleware = requireRole("admin", "manager");
     const req = mockReq();
     const res = mockRes();
     const next = mockNext();
@@ -188,12 +208,12 @@ describe("requireRole", () => {
       lean: () => ({
         _id: "cu-1",
         companyId: "comp-1",
-        role: "viewer",
+        role: "vendor",
         permissions: [],
       }),
     });
 
-    const middleware = requireRole("admin", "marketing");
+    const middleware = requireRole("admin", "manager");
     const req = mockReq();
     const res = mockRes();
     const next = mockNext();
@@ -206,8 +226,8 @@ describe("requireRole", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         error: "Forbidden: insufficient role",
-        required: ["admin", "marketing"],
-        actual: "viewer",
+        required: ["admin", "manager"],
+        actual: "vendor",
       }),
     );
   });
@@ -223,17 +243,21 @@ describe("requirePermission", () => {
       lean: () => ({
         _id: "cu-1",
         companyId: "comp-1",
-        role: "marketing",
+        role: "manager",
         permissions: [
-          "invite:candidate",
-          "candidates:view",
-          "candidates:manage",
-          "reports:view",
+          "dashboard",
+          "job_postings",
+          "hiring_firing",
+          "candidates",
+          "workers",
+          "projects",
+          "staffing",
+          "placement",
         ],
       }),
     });
 
-    const middleware = requirePermission("invite:candidate");
+    const middleware = requirePermission("candidates");
     const req = mockReq();
     const res = mockRes();
     const next = mockNext();
@@ -250,18 +274,12 @@ describe("requirePermission", () => {
       lean: () => ({
         _id: "cu-1",
         companyId: "comp-1",
-        role: "viewer",
-        permissions: [
-          "finance:view",
-          "hr:view",
-          "operations:view",
-          "reports:view",
-          "candidates:view",
-        ],
+        role: "vendor",
+        permissions: ["dashboard", "job_postings", "hiring_firing"],
       }),
     });
 
-    const middleware = requirePermission("invite:candidate");
+    const middleware = requirePermission("finance");
     const req = mockReq();
     const res = mockRes();
     const next = mockNext();
@@ -274,7 +292,7 @@ describe("requirePermission", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         error: "Forbidden: missing permissions",
-        required: ["invite:candidate"],
+        required: ["finance"],
       }),
     );
   });
@@ -284,12 +302,12 @@ describe("requirePermission", () => {
       lean: () => ({
         _id: "cu-1",
         companyId: "comp-1",
-        role: "marketing",
-        permissions: ["invite:candidate"],
+        role: "vendor",
+        permissions: ["dashboard", "job_postings"],
       }),
     });
 
-    const middleware = requirePermission("invite:candidate", "users:manage");
+    const middleware = requirePermission("job_postings", "finance");
     const req = mockReq();
     const res = mockRes();
     const next = mockNext();

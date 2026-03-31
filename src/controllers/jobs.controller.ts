@@ -8,6 +8,7 @@ import {
   PokeLog,
   Company,
 } from "../models";
+import { getNextId } from "../models/Counter";
 import {
   matchCandidateToJobs,
   matchJobsToCandidates,
@@ -164,16 +165,27 @@ export async function createJob(
 
     // -- Salary field validation --------------------------------------------
     if (body.salaryMin !== undefined && body.salaryMin < 0) {
-      res.status(400).json({ error: "salaryMin must be non-negative" }); return;
+      res.status(400).json({ error: "salaryMin must be non-negative" });
+      return;
     }
     if (body.salaryMax !== undefined && body.salaryMax < 0) {
-      res.status(400).json({ error: "salaryMax must be non-negative" }); return;
+      res.status(400).json({ error: "salaryMax must be non-negative" });
+      return;
     }
-    if (body.salaryMin !== undefined && body.salaryMax !== undefined && body.salaryMin > body.salaryMax) {
-      res.status(400).json({ error: "salaryMin must not exceed salaryMax" }); return;
+    if (
+      body.salaryMin !== undefined &&
+      body.salaryMax !== undefined &&
+      body.salaryMin > body.salaryMax
+    ) {
+      res.status(400).json({ error: "salaryMin must not exceed salaryMax" });
+      return;
     }
-    if (body.payPerHour !== undefined && (body.payPerHour < 0 || body.payPerHour > 10000)) {
-      res.status(400).json({ error: "payPerHour must be between 0 and 10000" }); return;
+    if (
+      body.payPerHour !== undefined &&
+      (body.payPerHour < 0 || body.payPerHour > 10000)
+    ) {
+      res.status(400).json({ error: "payPerHour must be between 0 and 10000" });
+      return;
     }
 
     // -- Job posting limit enforcement --------------------------------------
@@ -287,7 +299,11 @@ export async function applyToJob(
         candidateEmail: req.user!.email,
         coverLetter: (() => {
           const cl = req.body.coverLetter || req.body.cover_letter || "";
-          if (cl && cl.length > 2000) throw Object.assign(new Error("Cover letter must not exceed 2000 characters"), { statusCode: 400 });
+          if (cl && cl.length > 2000)
+            throw Object.assign(
+              new Error("Cover letter must not exceed 2000 characters"),
+              { statusCode: 400 },
+            );
           return cl;
         })(),
       });
@@ -481,8 +497,10 @@ export async function createProfile(
     }
 
     try {
+      const displayId = await getNextId("candidate");
       const profile = await CandidateProfile.create({
         ...incoming,
+        displayId,
         candidateId: req.user!.userId,
         username: req.user!.username || "",
         email: req.user!.email,
@@ -913,7 +931,7 @@ export async function poke(
     if (already) {
       const action = is_email ? "emailed" : "poked";
       const target =
-        req.user!.userType === "vendor" ? "candidate" : "job posting";
+        req.user!.userType === "employer" ? "candidate" : "job posting";
       res
         .status(409)
         .json({ error: `You have already ${action} this ${target}.` });
@@ -927,7 +945,10 @@ export async function poke(
       const yearMonth = new Date().toISOString().slice(0, 7);
       // Check BEFORE incrementing to avoid race condition where two simultaneous
       // requests both pass the limit check and both get through
-      const existing = await PokeLog.findOne({ userId: req.user!.userId, yearMonth }).lean();
+      const existing = await PokeLog.findOne({
+        userId: req.user!.userId,
+        yearMonth,
+      }).lean();
       if (existing && existing.count >= pokeLimit) {
         res.status(429).json({
           error: `Monthly poke limit reached (${pokeLimit}/month on your ${plan} plan). Upgrade at /pricing to send more.`,
@@ -1009,7 +1030,7 @@ export async function getPokesReceived(
 ): Promise<void> {
   try {
     let records: any[];
-    if (req.user!.userType === "vendor") {
+    if (req.user!.userType === "employer") {
       const page = Math.max(Number(req.query.page) || 1, 1);
       const limit = Math.min(Number(req.query.limit) || 50, 100);
       const skip = (page - 1) * limit;
