@@ -45,20 +45,13 @@ export async function getFinanceDashboard(
         { $group: { _id: null, total: { $sum: "$balanceDue" } } },
       ]),
       // Recent payroll periods
-      PayPeriod.find({ companyId })
-        .sort({ periodEnd: -1 })
-        .limit(5)
-        .lean(),
+      PayPeriod.find({ companyId }).sort({ periodEnd: -1 }).limit(5).lean(),
       // Paid invoices this month
       Invoice.countDocuments({
         companyId,
         status: "PAID",
         paidAt: {
-          $gte: new Date(
-            new Date().getFullYear(),
-            new Date().getMonth(),
-            1,
-          ),
+          $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
         },
       }),
       // Pending timesheet approvals
@@ -91,7 +84,7 @@ export async function getProfitLoss(
       endDate?: string;
     };
 
-    const dateFilter: any = {};
+    const dateFilter: Record<string, Date> = {};
     if (startDate) dateFilter.$gte = new Date(startDate);
     if (endDate) dateFilter.$lte = new Date(endDate);
 

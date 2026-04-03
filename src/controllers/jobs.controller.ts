@@ -12,6 +12,9 @@ import { getNextId } from "../models/Counter";
 import {
   matchCandidateToJobs,
   matchJobsToCandidates,
+  MatchedJob,
+  type IJob as MatchIJob,
+  type ICandidateProfile as MatchProfile,
 } from "../services/matching.service";
 import { sendPokeEmail } from "../services/sendgrid.service";
 import { extractSkills } from "../services/skill-extractor.service";
@@ -314,8 +317,8 @@ export async function applyToJob(
       );
 
       res.status(201).json(profileToJSON(app.toObject()));
-    } catch (e: any) {
-      if (e.code === 11000) {
+    } catch (e) {
+      if ((e as { code?: number })?.code === 11000) {
         res.status(409).json({ error: "Already applied to this job" });
         return;
       }
@@ -486,7 +489,7 @@ export async function createProfile(
 ): Promise<void> {
   try {
     const rawVisibilityConfig = req.body.visibility_config;
-    const incoming = toCamelCase(req.body);
+    const incoming = toCamelCase(req.body) as Record<string, unknown>;
     if (rawVisibilityConfig !== undefined) {
       incoming.visibilityConfig = rawVisibilityConfig;
     }
@@ -507,8 +510,8 @@ export async function createProfile(
         skills: incoming.skills || [],
       });
       res.status(201).json(profileToJSON(profile.toObject()));
-    } catch (e: any) {
-      if (e.code === 11000) {
+    } catch (e) {
+      if ((e as { code?: number })?.code === 11000) {
         res
           .status(409)
           .json({ error: "Profile already exists. Use PUT to update." });
@@ -523,7 +526,10 @@ export async function createProfile(
 
 // -- Helpers for updateProfile --
 
-function validateAppendOnlyFields(existing: any, incoming: any): string | null {
+function validateAppendOnlyFields(
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): string | null {
   const appendFields = [
     "resumeSummary",
     "resumeExperience",
@@ -531,8 +537,8 @@ function validateAppendOnlyFields(existing: any, incoming: any): string | null {
     "resumeAchievements",
   ] as const;
   for (const field of appendFields) {
-    const existingVal = existing[field] || "";
-    const incomingVal = incoming[field] || "";
+    const existingVal = (existing[field] || "") as string;
+    const incomingVal = (incoming[field] || "") as string;
     if (incomingVal && existingVal && !incomingVal.startsWith(existingVal)) {
       return `Cannot modify existing content in ${field}. You may only append new content.`;
     }
@@ -560,7 +566,10 @@ function mergeVisibilityConfig(
   return merged;
 }
 
-function buildLockedUpdateData(existing: any, incoming: any): any {
+function buildLockedUpdateData(
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
   // When profile is locked, ignore incoming visibilityConfig — only paid updates (via webhook) are allowed
   const mergedVis = existing.visibilityConfig || {};
 
@@ -573,7 +582,10 @@ function buildLockedUpdateData(existing: any, incoming: any): any {
     existing.currentRole || "",
   ].join(" ");
   const mergedSkills = Array.from(
-    new Set([...existing.skills, ...extractSkills(fullResumeText)]),
+    new Set([
+      ...(existing.skills as string[]),
+      ...extractSkills(fullResumeText),
+    ]),
   );
 
   return {
@@ -596,7 +608,9 @@ function buildLockedUpdateData(existing: any, incoming: any): any {
   };
 }
 
-function buildNewProfileData(incoming: any): any {
+function buildNewProfileData(
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
   const resumeText = [
     incoming.resumeSummary || "",
     incoming.resumeExperience || "",
@@ -620,7 +634,7 @@ export async function updateProfile(
 ): Promise<void> {
   try {
     const rawVisibilityConfig = req.body.visibility_config;
-    const incoming = toCamelCase(req.body);
+    const incoming = toCamelCase(req.body) as Record<string, unknown>;
     if (rawVisibilityConfig !== undefined) {
       incoming.visibilityConfig = rawVisibilityConfig;
     }
@@ -629,24 +643,30 @@ export async function updateProfile(
       candidateId: req.user!.userId,
     }).lean();
 
-    let updateData: any;
+    let updateData: Record<string, unknown>;
 
     if (existing?.profileLocked) {
-      const appendError = validateAppendOnlyFields(existing, incoming);
+      const appendError = validateAppendOnlyFields(
+        existing as unknown as Record<string, unknown>,
+        incoming,
+      );
       if (appendError) {
         res.status(400).json({ error: appendError });
         return;
       }
       if (
         incoming.experienceYears != null &&
-        incoming.experienceYears < existing.experienceYears
+        (incoming.experienceYears as number) < existing.experienceYears
       ) {
         res.status(400).json({
           error: "Experience years can only be increased, not decreased.",
         });
         return;
       }
-      updateData = buildLockedUpdateData(existing, incoming);
+      updateData = buildLockedUpdateData(
+        existing as unknown as Record<string, unknown>,
+        incoming,
+      );
     } else {
       if (!incoming.profileCountry) {
         res.status(400).json({ error: "Subscription country is required." });
@@ -700,61 +720,58 @@ export async function deleteProfile(
 // -- Helpers for candidateMatches --
 
 function filterMatchesByCountry(
-  allMatched: any[],
+  allMatched: MatchedJob[],
   candidateCountry: string,
-): any[] {
+): MatchedJob[] {
   if (!candidateCountry) return allMatched;
-  return allMatched.filter((m: any) => {
-    const jobCountry = m.jobCountry || m.job_country || "";
+  return allMatched.filter((m) => {
+    const jobCountry = m.jobCountry || "";
     return jobCountry === candidateCountry;
   });
 }
 
 function filterMatchesByAllowedTypes(
-  matches: any[],
+  matches: MatchedJob[],
   typesParam: string | undefined,
-): any[] {
+): MatchedJob[] {
   if (!typesParam) return matches;
   const allowedTypes = new Set(
     typesParam.split(",").map((t: string) => t.trim()),
   );
-  return matches.filter((m: any) => {
-    const jt = m.jobType || m.job_type || "";
+  return matches.filter((m) => {
+    const jt = m.jobType || "";
     return allowedTypes.has(jt);
   });
 }
 
-function applyQueryFilters(matched: any[], query: Record<string, any>): any[] {
+function applyQueryFilters(
+  matched: MatchedJob[],
+  query: Record<string, unknown>,
+): MatchedJob[] {
   let result = matched;
 
   const filterTypeParam = query.filter_type as string | undefined;
   if (filterTypeParam) {
-    result = result.filter(
-      (m: any) => (m.jobType || m.job_type || "") === filterTypeParam,
-    );
+    result = result.filter((m) => (m.jobType || "") === filterTypeParam);
   }
 
   const subTypeParam = query.sub_type as string | undefined;
   if (subTypeParam) {
-    result = result.filter(
-      (m: any) => (m.jobSubType || m.job_sub_type || "") === subTypeParam,
-    );
+    result = result.filter((m) => (m.jobSubType || "") === subTypeParam);
   }
 
   const workModeParam = query.work_mode as string | undefined;
   if (workModeParam) {
-    result = result.filter(
-      (m: any) => (m.workMode || m.work_mode || "") === workModeParam,
-    );
+    result = result.filter((m) => (m.workMode || "") === workModeParam);
   }
 
   const searchParam = query.search as string | undefined;
   if (searchParam) {
     const q = searchParam.trim().toLowerCase();
-    result = result.filter((m: any) => {
+    result = result.filter((m) => {
       const title = (m.title || "").toLowerCase();
       const loc = (m.location || "").toLowerCase();
-      const email = (m.vendorEmail || m.vendor_email || "").toLowerCase();
+      const email = (m.vendorEmail || "").toLowerCase();
       return title.includes(q) || loc.includes(q) || email.includes(q);
     });
   }
@@ -782,7 +799,10 @@ export async function candidateMatches(
     }
 
     const jobs = await Job.find({ isActive: true }).lean();
-    const allMatched = matchCandidateToJobs(profile as any, jobs as any);
+    const allMatched = matchCandidateToJobs(
+      profile as MatchProfile,
+      jobs as MatchIJob[],
+    );
 
     const locationFiltered = filterMatchesByCountry(
       allMatched,
@@ -797,16 +817,16 @@ export async function candidateMatches(
     const typeCounts: Record<string, number> = {};
     const subTypeCounts: Record<string, Record<string, number>> = {};
     for (const m of matched) {
-      const jt = m.jobType || m.job_type || "other";
+      const jt = m.jobType || "other";
       typeCounts[jt] = (typeCounts[jt] || 0) + 1;
-      const jst = m.jobSubType || m.job_sub_type || "";
+      const jst = m.jobSubType || "";
       if (jst) {
         if (!subTypeCounts[jt]) subTypeCounts[jt] = {};
         subTypeCounts[jt][jst] = (subTypeCounts[jt][jst] || 0) + 1;
       }
     }
 
-    matched = applyQueryFilters(matched, req.query);
+    matched = applyQueryFilters(matched, req.query as Record<string, unknown>);
 
     const wantPaginated = req.query.page !== undefined;
     if (wantPaginated) {
@@ -815,7 +835,7 @@ export async function candidateMatches(
       const sliced = matched.slice(skip, skip + limit);
 
       res.json({
-        data: sliced.map((m: any) => toSnakeCase({ ...m, id: m.id })),
+        data: sliced.map((m) => toSnakeCase({ ...m, id: m._id })),
         total,
         page,
         limit,
@@ -824,7 +844,7 @@ export async function candidateMatches(
         subTypeCounts,
       });
     } else {
-      res.json(matched.map((m: any) => toSnakeCase({ ...m, id: m.id })));
+      res.json(matched.map((m) => toSnakeCase({ ...m, id: m._id })));
     }
   } catch (err) {
     next(err);
@@ -840,7 +860,10 @@ export async function vendorCandidates(
   try {
     const { job_id } = req.query as { job_id?: string };
 
-    const jobWhere: any = { vendorId: req.user!.userId, isActive: true };
+    const jobWhere: Record<string, unknown> = {
+      vendorId: req.user!.userId,
+      isActive: true,
+    };
     if (job_id) jobWhere._id = job_id;
 
     const jobs = await Job.find(jobWhere).lean();
@@ -855,16 +878,19 @@ export async function vendorCandidates(
 
     // -- Location-based filtering --
     const jobCountries = new Set(
-      jobs.map((j: any) => j.jobCountry || "").filter(Boolean),
+      jobs.map((j) => j.jobCountry || "").filter(Boolean),
     );
 
-    const profileWhere: any = {};
+    const profileWhere: Record<string, unknown> = {};
     if (jobCountries.size > 0) {
       profileWhere.profileCountry = { $in: Array.from(jobCountries) };
     }
 
     const profiles = await CandidateProfile.find(profileWhere).lean();
-    const matched = matchJobsToCandidates(jobs as any, profiles as any);
+    const matched = matchJobsToCandidates(
+      jobs as MatchIJob[],
+      profiles as MatchProfile[],
+    );
 
     const wantPaginated = req.query.page !== undefined;
     if (wantPaginated) {
@@ -872,14 +898,14 @@ export async function vendorCandidates(
       const total = matched.length;
       const sliced = matched.slice(skip, skip + limit);
       res.json({
-        data: sliced.map((m: any) => toSnakeCase({ ...m, id: m.id })),
+        data: sliced.map((m) => toSnakeCase({ ...m, id: m._id })),
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit),
       });
     } else {
-      res.json(matched.map((m: any) => toSnakeCase({ ...m, id: m.id })));
+      res.json(matched.map((m) => toSnakeCase({ ...m, id: m._id })));
     }
   } catch (err) {
     next(err);
@@ -1029,7 +1055,7 @@ export async function getPokesReceived(
   next: NextFunction,
 ): Promise<void> {
   try {
-    let records: any[];
+    let records: Record<string, unknown>[];
     if (req.user!.userType === "employer") {
       const page = Math.max(Number(req.query.page) || 1, 1);
       const limit = Math.min(Number(req.query.limit) || 50, 100);

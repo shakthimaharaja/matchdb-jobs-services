@@ -13,7 +13,7 @@ function required(key: string): string {
 
 export const env = {
   NODE_ENV: ENV,
-  PORT: parseInt(process.env.PORT || "8001", 10),
+  PORT: Number.parseInt(process.env.PORT || "8001", 10),
   MONGO_URI: required("MONGO_URI"),
   JWT_SECRET: required("JWT_SECRET"),
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || "",

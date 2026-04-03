@@ -112,12 +112,8 @@ export async function getPublicData(
         .lean(),
     ]);
 
-    const jobs = rawJobs.map((j) =>
-      jobToJSON(j as unknown as Record<string, unknown>),
-    );
-    const profiles = rawProfiles.map((p) =>
-      profileToJSON(p as unknown as Record<string, unknown>),
-    );
+    const jobs = rawJobs.map((j) => jobToJSON(j));
+    const profiles = rawProfiles.map((p) => profileToJSON(p));
 
     // ── Diff jobs ──────────────────────────────────────────────────────────
     const jobDiff = diffRecords(jobs, prevJobMap, prevJobObjects);

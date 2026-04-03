@@ -184,8 +184,8 @@ router.post("/setup", requireAuth, async (req: Request, res: Response) => {
       seatLimit: admin.seatLimit,
       seatsUsed: admin.seatsUsed,
     });
-  } catch (err: any) {
-    if (err.name === "ZodError") {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Validation failed", details: err.errors });
       return;
     }
@@ -356,8 +356,8 @@ router.post(
         expiresAt: invite.expiresAt,
         token: invite.token,
       });
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });
@@ -476,8 +476,7 @@ router.post("/register/:token", async (req: Request, res: Response) => {
 
     // Create CompanyUser
     const role = invite.assignedRole as UserRole;
-    const dept = (invite as any)
-      .assignedDepartment as MarketerDepartment | null;
+    const dept = invite.assignedDepartment as MarketerDepartment | null;
     const roleKey = resolveRoleKey(role, dept);
     const workerId = await getNextId("worker");
     await CompanyUser.create({
@@ -511,12 +510,12 @@ router.post("/register/:token", async (req: Request, res: Response) => {
       companyId: invite.companyId,
       role,
     });
-  } catch (err: any) {
-    if (err.name === "ZodError") {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Validation failed", details: err.errors });
       return;
     }
-    if (err.code === 11000) {
+    if ((err as { code?: number })?.code === 11000) {
       res
         .status(409)
         .json({ error: "User already registered with this company" });
@@ -659,8 +658,8 @@ router.put(
         department: user.department,
         permissions: user.permissions,
       });
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });
@@ -720,8 +719,8 @@ router.put(
         id: user._id,
         status: user.status,
       });
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });
@@ -960,8 +959,8 @@ router.put(
         billingCycle: body.billingCycle,
         status: "active",
       });
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });
@@ -1036,8 +1035,8 @@ router.put(
       }
 
       res.json(company);
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });

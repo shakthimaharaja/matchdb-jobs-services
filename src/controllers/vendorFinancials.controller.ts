@@ -136,7 +136,7 @@ export async function getVendorFinancialSummary(
 
     // 5. Marketer company names (from Company collection by marketerId)
     const marketerIds = [
-      ...new Set(financials.map((f) => f.marketerId).filter(Boolean)),
+      ...new Set(financials.map((f) => f.employerId).filter(Boolean)),
     ];
     const companies = marketerIds.length
       ? await Company.find({ adminUserId: { $in: marketerIds } })
@@ -218,7 +218,7 @@ export async function getVendorFinancialSummary(
         clientName,
         implementationPartner: fin?.implementationPartner || "—",
         marketerCompanyName: fin
-          ? companyByMarketerId.get(fin.marketerId) || "—"
+          ? companyByMarketerId.get(fin.employerId) || "—"
           : "—",
         billRate: fin ? toNum(fin.billRate) : 0,
         payRate: fin ? toNum(fin.payRate) : 0,

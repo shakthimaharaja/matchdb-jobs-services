@@ -17,7 +17,7 @@ export interface ITimesheet {
   jobTitle: string;
   weekStart: Date;
   weekEnd: Date;
-  entries: any;
+  entries: Record<string, unknown> | null;
   totalHours: number;
   regularHours: number;
   overtimeHours: number;

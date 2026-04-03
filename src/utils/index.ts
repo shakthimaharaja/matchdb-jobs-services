@@ -15,10 +15,10 @@ export function camelToSnake(str: string): string {
 }
 
 /** Recursively convert all object keys from camelCase to snake_case */
-export function toSnakeCase(obj: any): any {
+export function toSnakeCase(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(toSnakeCase);
   if (obj && typeof obj === "object" && !(obj instanceof Date)) {
-    const result: any = {};
+    const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       result[camelToSnake(key)] = toSnakeCase(value);
     }
@@ -33,10 +33,10 @@ export function snakeToCamel(str: string): string {
 }
 
 /** Recursively convert all object keys from snake_case to camelCase */
-export function toCamelCase(obj: any): any {
+export function toCamelCase(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(toCamelCase);
   if (obj && typeof obj === "object" && !(obj instanceof Date)) {
-    const result: any = {};
+    const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       result[snakeToCamel(key)] = toCamelCase(value);
     }
@@ -46,19 +46,21 @@ export function toCamelCase(obj: any): any {
 }
 
 /** Convert a Mongoose job doc to a snake_case JSON with `id` field */
-export function jobToJSON(job: any): any {
-  return toSnakeCase({ ...job, id: job._id || job.id });
+export function jobToJSON(job: unknown): Record<string, unknown> {
+  const o = (job ?? {}) as Record<string, unknown>;
+  return toSnakeCase({ ...o, id: o._id ?? o.id }) as Record<string, unknown>;
 }
 
 /** Convert a Mongoose profile doc to a snake_case JSON with `id` field */
-export function profileToJSON(p: any): any {
-  return toSnakeCase({ ...p, id: p._id || p.id });
+export function profileToJSON(p: unknown): Record<string, unknown> {
+  const o = (p ?? {}) as Record<string, unknown>;
+  return toSnakeCase({ ...o, id: o._id ?? o.id }) as Record<string, unknown>;
 }
 
 // ── Pagination ──────────────────────────────────────────────────────────────
 
 /** Parse page/limit from query string with safe bounds */
-export function parsePagination(query: any): {
+export function parsePagination(query: Record<string, unknown>): {
   page: number;
   limit: number;
   skip: number;

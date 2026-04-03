@@ -12,7 +12,7 @@ export async function listBills(
   try {
     const { companyId } = req.companyUser!;
     const { status, vendorId, page = "1", limit = "20" } = req.query;
-    const filter: any = { companyId };
+    const filter: Record<string, unknown> = { companyId };
     if (status) filter.status = status;
     if (vendorId) filter.vendorId = vendorId;
 

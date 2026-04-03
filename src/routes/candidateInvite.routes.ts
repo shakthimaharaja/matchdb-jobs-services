@@ -9,6 +9,7 @@
  */
 import { Router, Request, Response } from "express";
 import { z } from "zod";
+import type Stripe from "stripe";
 import { randomUUID } from "node:crypto";
 import { CandidateInvitation } from "../models/CandidateInvitation";
 import { CandidateUser } from "../models/CandidateUser";
@@ -112,8 +113,8 @@ router.post(
         status: invite.status,
         tokenExpiresAt: invite.tokenExpiresAt,
       });
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });
@@ -250,12 +251,12 @@ router.post("/register/:token", async (req: Request, res: Response) => {
       status: "payment_pending",
       message: "Account created. Complete payment to activate.",
     });
-  } catch (err: any) {
-    if (err.name === "ZodError") {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Validation failed", details: err.errors });
       return;
     }
-    if (err.code === 11000) {
+    if ((err as { code?: number })?.code === 11000) {
       res.status(409).json({ error: "Candidate account already exists" });
       return;
     }
@@ -298,14 +299,14 @@ router.post("/payment/session", async (req: Request, res: Response) => {
     const stripe = new Stripe(
       process.env.STRIPE_SECRET_KEY || "sk_test_placeholder",
       {
-        apiVersion: "2023-10-16" as any,
+        apiVersion: "2023-10-16" as Stripe.LatestApiVersion,
       },
     );
 
     const mode = plan.billingCycle === "one-time" ? "payment" : "subscription";
 
     const session = await stripe.checkout.sessions.create({
-      mode: mode as any,
+      mode: mode as Stripe.Checkout.SessionCreateParams.Mode,
       customer_email: candidate.email,
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
       metadata: {
@@ -327,8 +328,8 @@ router.post("/payment/session", async (req: Request, res: Response) => {
       sessionId: session.id,
       url: session.url,
     });
-  } catch (err: any) {
-    if (err.name === "ZodError") {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Validation failed", details: err.errors });
       return;
     }
@@ -347,7 +348,7 @@ router.post("/payment/webhook", async (req: Request, res: Response) => {
     const stripe = new Stripe(
       process.env.STRIPE_SECRET_KEY || "sk_test_placeholder",
       {
-        apiVersion: "2023-10-16" as any,
+        apiVersion: "2023-10-16" as Stripe.LatestApiVersion,
       },
     );
 
@@ -366,7 +367,7 @@ router.post("/payment/webhook", async (req: Request, res: Response) => {
       event.type === "checkout.session.completed" ||
       event.type === "payment_intent.succeeded"
     ) {
-      const session = event.data.object as any;
+      const session = event.data.object as Stripe.Checkout.Session;
       const meta = session.metadata || {};
       const candidateUserId = meta.candidateUserId;
       const invitationId = meta.invitationId;
@@ -415,7 +416,7 @@ router.post("/payment/webhook", async (req: Request, res: Response) => {
     }
 
     if (event.type === "payment_intent.payment_failed") {
-      const intent = event.data.object as any;
+      const intent = event.data.object as Stripe.PaymentIntent;
       const meta = intent.metadata || {};
       const candidateUserId = meta.candidateUserId;
       const invitationId = meta.invitationId;
@@ -688,8 +689,8 @@ router.post(
 
       const plan = await CandidatePlan.create({ ...body, companyId });
       res.status(201).json(plan);
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });
@@ -737,8 +738,8 @@ router.put(
         return;
       }
       res.json(plan);
-    } catch (err: any) {
-      if (err.name === "ZodError") {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
         res
           .status(400)
           .json({ error: "Validation failed", details: err.errors });

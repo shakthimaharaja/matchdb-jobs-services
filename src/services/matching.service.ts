@@ -1,6 +1,6 @@
 // ─── Lightweight interfaces for matching (mirror Mongoose Job & CandidateProfile) ─
 
-interface IJob {
+export interface IJob {
   _id?: string;
   id?: string;
   title: string;
@@ -8,17 +8,23 @@ interface IJob {
   jobType: string;
   jobSubType?: string;
   experienceRequired: number;
+  location?: string;
+  jobCountry?: string;
+  vendorEmail?: string;
+  workMode?: string;
+  isActive?: boolean;
   toObject?(): Record<string, unknown>;
   [key: string]: unknown;
 }
 
-interface ICandidateProfile {
+export interface ICandidateProfile {
   _id?: string;
   id?: string;
   skills: string[];
   preferredJobType: string;
   experienceYears: number;
   visibilityConfig?: Record<string, string[]>;
+  profileCountry?: string;
   toObject?(): Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -67,13 +73,12 @@ export interface MatchedCandidate extends ICandidateProfile {
 
 // Visibility filter: does the candidate's visibilityConfig include this job's type/subType?
 function isVisibleForJob(candidate: ICandidateProfile, job: IJob): boolean {
-  const vis: Record<string, string[]> =
-    (candidate as any).visibilityConfig || {};
+  const vis: Record<string, string[]> = candidate.visibilityConfig || {};
   if (!Object.keys(vis).length) return true; // no config = visible everywhere (backward compat)
-  const jobType = (job as any).jobType || "";
+  const jobType = job.jobType || "";
   if (!jobType) return true;
   if (!(jobType in vis)) return false; // candidate not visible for this job type
-  const jobSubType = (job as any).jobSubType || "";
+  const jobSubType = job.jobSubType || "";
   if (
     jobSubType &&
     vis[jobType].length > 0 &&
@@ -101,7 +106,7 @@ export function matchCandidateToJobs(
 
       return {
         ...obj,
-        id: (job._id || (job as any).id)?.toString(),
+        id: job._id?.toString(),
         matchPercentage: pct,
         matchBreakdown: { skills, type, experience: exp },
       } as unknown as MatchedJob;
@@ -135,7 +140,7 @@ export function matchJobsToCandidates(
 
       if (pct > bestPct) {
         bestPct = pct;
-        bestJobId = (job._id || (job as any).id)?.toString();
+        bestJobId = job._id?.toString() ?? "";
         bestJobTitle = job.title;
         bestBreakdown = { skills, type, experience: exp };
       }
@@ -148,7 +153,7 @@ export function matchJobsToCandidates(
           : candidate;
       results.push({
         ...obj,
-        id: (candidate._id || (candidate as any).id)?.toString(),
+        id: candidate._id?.toString(),
         matchPercentage: bestPct,
         matchedJobId: bestJobId,
         matchedJobTitle: bestJobTitle,

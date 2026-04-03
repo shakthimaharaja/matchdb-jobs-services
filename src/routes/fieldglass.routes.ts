@@ -1,8 +1,5 @@
 import { Router } from "express";
-import {
-  requirePermission,
-  requireRole,
-} from "../middleware/rbac.middleware";
+import { requirePermission, requireRole } from "../middleware/rbac.middleware";
 import { requireCandidate } from "../middleware/auth.middleware";
 import {
   getTimeEntries,

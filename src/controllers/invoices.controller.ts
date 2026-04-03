@@ -14,7 +14,7 @@ export async function listInvoices(
   try {
     const { companyId } = req.companyUser!;
     const { status, clientId, page = "1", limit = "20" } = req.query;
-    const filter: any = { companyId };
+    const filter: Record<string, unknown> = { companyId };
     if (status) filter.status = status;
     if (clientId) filter.clientId = clientId;
 
@@ -144,20 +144,20 @@ export async function updateInvoice(
       return;
     }
     if (invoice.status !== "DRAFT") {
-      res
-        .status(400)
-        .json({ error: "Only DRAFT invoices can be edited" });
+      res.status(400).json({ error: "Only DRAFT invoices can be edited" });
       return;
     }
 
     const { lineItems, dueDate, notes, taxRate } = req.body;
     if (lineItems) {
-      invoice.lineItems = lineItems.map((item: any) => ({
-        ...item,
-        amount: item.hours * item.rate,
-      }));
+      invoice.lineItems = lineItems.map(
+        (item: { hours: number; rate: number; [key: string]: unknown }) => ({
+          ...item,
+          amount: item.hours * item.rate,
+        }),
+      );
       invoice.subtotal = invoice.lineItems.reduce(
-        (sum: number, li: any) => sum + li.amount,
+        (sum: number, li: { amount: number }) => sum + li.amount,
         0,
       );
     }
@@ -193,7 +193,9 @@ export async function sendInvoice(
       return;
     }
     if (!["DRAFT", "SENT"].includes(invoice.status)) {
-      res.status(400).json({ error: "Invoice cannot be sent in current status" });
+      res
+        .status(400)
+        .json({ error: "Invoice cannot be sent in current status" });
       return;
     }
 
@@ -295,7 +297,8 @@ export async function getInvoiceAging(
 
     for (const inv of openInvoices) {
       const daysPastDue = Math.floor(
-        (now.getTime() - new Date(inv.dueDate).getTime()) / (1000 * 60 * 60 * 24),
+        (now.getTime() - new Date(inv.dueDate).getTime()) /
+          (1000 * 60 * 60 * 24),
       );
       const balance = inv.balanceDue;
 
@@ -354,7 +357,8 @@ export async function generateInvoiceFromTimesheets(
       const billRate = rateCard?.billRate || ts.billRate || 0;
       const regularAmount = (ts.regularHours || 0) * billRate;
       const overtimeAmount =
-        (ts.overtimeHours || 0) * (rateCard?.overtimeBillRate || billRate * 1.5);
+        (ts.overtimeHours || 0) *
+        (rateCard?.overtimeBillRate || billRate * 1.5);
 
       lineItems.push({
         candidateId: ts.candidateId,

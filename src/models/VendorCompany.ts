@@ -1,11 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 
 export type VendorStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
-export type VendorCategory =
-  | "STAFFING"
-  | "TECHNOLOGY"
-  | "CONSULTING"
-  | "OTHER";
+export type VendorCategory = "STAFFING" | "TECHNOLOGY" | "CONSULTING" | "OTHER";
 
 export interface IVendorCompany {
   _id: string;

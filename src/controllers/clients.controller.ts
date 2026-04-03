@@ -12,7 +12,7 @@ export async function listClients(
   try {
     const { companyId } = req.companyUser!;
     const { status, page = "1", limit = "50" } = req.query;
-    const filter: any = { companyId };
+    const filter: Record<string, unknown> = { companyId };
     if (status) filter.status = status;
 
     const skip = (Number(page) - 1) * Number(limit);

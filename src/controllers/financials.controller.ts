@@ -369,7 +369,7 @@ export async function getFinancialSummary(
 
 // â”€â”€â”€ Helper to format Decimal to number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function formatFinancial(r: any) {
+function formatFinancial(r: Record<string, unknown>) {
   return {
     id: r._id,
     applicationId: r.applicationId,
@@ -379,8 +379,14 @@ function formatFinancial(r: any) {
     billRate: toNum(r.billRate),
     payRate: toNum(r.payRate),
     hoursWorked: toNum(r.hoursWorked),
-    projectStart: r.projectStart?.toISOString?.() ?? r.projectStart ?? null,
-    projectEnd: r.projectEnd?.toISOString?.() ?? r.projectEnd ?? null,
+    projectStart:
+      r.projectStart instanceof Date
+        ? r.projectStart.toISOString()
+        : (r.projectStart ?? null),
+    projectEnd:
+      r.projectEnd instanceof Date
+        ? r.projectEnd.toISOString()
+        : (r.projectEnd ?? null),
     stateCode: r.stateCode,
     stateTaxPct: toNum(r.stateTaxPct),
     cashPct: toNum(r.cashPct),
@@ -397,12 +403,18 @@ function formatFinancial(r: any) {
     implementationPartner: r.implementationPartner ?? "",
     pocName: r.pocName ?? "",
     pocEmail: r.pocEmail ?? "",
-    createdAt: r.createdAt?.toISOString?.() ?? r.createdAt ?? "",
-    updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt ?? "",
+    createdAt:
+      r.createdAt instanceof Date
+        ? r.createdAt.toISOString()
+        : (r.createdAt ?? ""),
+    updatedAt:
+      r.updatedAt instanceof Date
+        ? r.updatedAt.toISOString()
+        : (r.updatedAt ?? ""),
   };
 }
 
-function toNum(v: number | null | undefined): number {
+function toNum(v: unknown): number {
   if (v == null) return 0;
   return Number(v);
 }

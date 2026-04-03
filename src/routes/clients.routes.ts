@@ -18,10 +18,6 @@ router.post("/", requirePermission("clients"), createClient);
 router.get("/:id", requirePermission("clients"), getClient);
 router.put("/:id", requirePermission("clients"), updateClient);
 router.get("/:id/rate-cards", requirePermission("clients"), getClientRateCards);
-router.post(
-  "/:id/rate-cards",
-  requirePermission("clients"),
-  createRateCard,
-);
+router.post("/:id/rate-cards", requirePermission("clients"), createRateCard);
 
 export default router;

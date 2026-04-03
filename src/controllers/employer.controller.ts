@@ -80,7 +80,7 @@ export async function getEmployerJobs(
       typeof req.query.search === "string" ? req.query.search : ""
     ).trim();
 
-    const where: any = { isActive: true };
+    const where: Record<string, unknown> = { isActive: true };
     if (search) {
       const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const rx = new RegExp(escaped, "i");
@@ -97,7 +97,7 @@ export async function getEmployerJobs(
       const ccIds = matchingClients.map((c) => c._id);
       const vcIds = matchingVendors.map((v) => v._id);
 
-      const orClauses: any[] = [
+      const orClauses: Record<string, unknown>[] = [
         { title: { $regex: rx } },
         { location: { $regex: rx } },
         { skillsRequired: search },
@@ -212,7 +212,7 @@ export async function getEmployerProfiles(
       typeof req.query.search === "string" ? req.query.search : ""
     ).trim();
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (search) {
       const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const rx = new RegExp(escaped, "i");
@@ -314,7 +314,7 @@ export async function registerCompany(
     // Look up via CompanyUser first
     const { CompanyUser } = await import("../models/CompanyUser");
     const cu = await CompanyUser.findOne({ userId, status: "active" }).lean();
-    let company: any = cu
+    let company = cu
       ? await Company.findById(cu.companyId).lean()
       : await Company.findOne({ adminUserId: userId }).lean();
 
@@ -443,8 +443,8 @@ export async function addEmployerCandidate(
         candidate_email: doc.candidateEmail,
         created_at: doc.createdAt?.toISOString() ?? "",
       });
-    } catch (e: any) {
-      if (e.code === 11000) {
+    } catch (e: unknown) {
+      if ((e as { code?: number })?.code === 11000) {
         res
           .status(409)
           .json({ error: "Candidate already added to your company" });
@@ -649,7 +649,7 @@ export async function getCompanySummary(
 
     // 6. Build projects array & domain counts
     const domainMap: Record<string, number> = {};
-    const projectsOut: any[] = [];
+    const projectsOut: Record<string, unknown>[] = [];
 
     for (const a of applications) {
       const email = cidToEmail[a.candidateId] ?? "";
@@ -1078,7 +1078,7 @@ export async function forwardOpening(
         created_at: doc.createdAt?.toISOString() ?? "",
       });
     } catch (e) {
-      if ((e as any).code === 11000) {
+      if ((e as { code?: number })?.code === 11000) {
         res.status(409).json({
           error: "This opening was already forwarded to this candidate",
         });
@@ -1544,7 +1544,7 @@ export async function forwardOpeningWithEmail(
         created_at: doc.createdAt?.toISOString() ?? "",
       });
     } catch (e) {
-      if ((e as any).code === 11000) {
+      if ((e as { code?: number })?.code === 11000) {
         res.status(409).json({
           error: "This opening was already forwarded to this candidate",
         });
@@ -1645,7 +1645,7 @@ export async function getCandidateMyDetail(
           .sort({ createdAt: -1 })
           .lean()
       : [];
-    const finByAppId: Record<string, any[]> = {};
+    const finByAppId: Record<string, typeof allFinancials> = {};
     for (const f of allFinancials) {
       if (!finByAppId[f.applicationId]) {
         finByAppId[f.applicationId] = [];
@@ -1733,7 +1733,7 @@ export async function getCandidateMyDetail(
           status: a.status,
           is_active: aJob?.isActive ?? false,
           applied_at: a.createdAt?.toISOString() ?? "",
-          financials: fins.map((fin: any) => ({
+          financials: fins.map((fin) => ({
             id: fin._id,
             uid: fin.employerId,
             billRate: Number(fin.billRate),

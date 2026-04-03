@@ -258,7 +258,9 @@ router.get(
         .lean();
       const emails = rosterEmails.map((r) => r.candidateEmail);
 
-      const filter: any = { candidateEmail: { $in: emails } };
+      const filter: Record<string, unknown> = {
+        candidateEmail: { $in: emails },
+      };
       if (status !== "all") filter.status = status;
 
       const timesheets = await Timesheet.find(filter)

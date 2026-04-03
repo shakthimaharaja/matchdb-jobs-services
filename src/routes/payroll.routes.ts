@@ -28,21 +28,13 @@ router.post(
   requirePermission("payroll"),
   submitPayPeriod,
 );
-router.post(
-  "/periods/:id/approve",
-  requireRole("admin"),
-  approvePayPeriod,
-);
+router.post("/periods/:id/approve", requireRole("admin"), approvePayPeriod);
 router.post(
   "/periods/:id/process",
   requirePermission("payroll"),
   processPayPeriod,
 );
-router.post(
-  "/periods/:id/void",
-  requireRole("admin"),
-  voidPayPeriod,
-);
+router.post("/periods/:id/void", requireRole("admin"), voidPayPeriod);
 
 // Pay stubs — employer views any person's stubs
 router.get("/stubs/:personId", requirePermission("payroll"), getPayStubs);

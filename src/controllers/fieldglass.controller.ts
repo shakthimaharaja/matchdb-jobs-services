@@ -40,9 +40,7 @@ export async function upsertTimeEntries(
       return;
     }
     if (timesheet.status !== "draft") {
-      res
-        .status(400)
-        .json({ error: "Only DRAFT timesheets can be edited" });
+      res.status(400).json({ error: "Only DRAFT timesheets can be edited" });
       return;
     }
 
@@ -111,10 +109,7 @@ export async function upsertTimeEntries(
       (sum, e) => sum + e.holidayHours,
       0,
     );
-    timesheet.totalHours = allEntries.reduce(
-      (sum, e) => sum + e.totalHours,
-      0,
-    );
+    timesheet.totalHours = allEntries.reduce((sum, e) => sum + e.totalHours, 0);
 
     // Snapshot rates from rate card if available
     if (timesheet.companyId && timesheet.candidateId) {
@@ -167,9 +162,7 @@ export async function submitTimesheet(
       return;
     }
     if (timesheet.status !== "draft") {
-      res
-        .status(400)
-        .json({ error: "Only DRAFT timesheets can be submitted" });
+      res.status(400).json({ error: "Only DRAFT timesheets can be submitted" });
       return;
     }
     if (timesheet.totalHours === 0) {
@@ -329,8 +322,7 @@ export async function getLeaveBalances(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const year =
-      Number(req.query.year) || new Date().getFullYear();
+    const year = Number(req.query.year) || new Date().getFullYear();
     const balances = await LeaveBalance.find({
       personId: req.params.personId,
       year,
@@ -350,8 +342,7 @@ export async function getMyLeaveBalances(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const year =
-      Number(req.query.year) || new Date().getFullYear();
+    const year = Number(req.query.year) || new Date().getFullYear();
     const balances = await LeaveBalance.find({
       personId: req.user!.userId,
       year,
@@ -394,17 +385,16 @@ export async function requestLeave(
 
     // Save balance will recompute remaining via pre-save hook
     if (balance.remaining < hours) {
-      res
-        .status(400)
-        .json({
-          error: `Insufficient ${leaveType} balance. Available: ${balance.remaining} hrs`,
-        });
+      res.status(400).json({
+        error: `Insufficient ${leaveType} balance. Available: ${balance.remaining} hrs`,
+      });
       return;
     }
 
     // Leave request is tracked; actual deduction happens on timesheet approval
     res.json({
-      message: "Leave request noted. Add hours to your weekly timesheet for processing.",
+      message:
+        "Leave request noted. Add hours to your weekly timesheet for processing.",
       leaveType,
       requestedHours: hours,
       availableBalance: balance.remaining,

@@ -114,7 +114,13 @@ export function resolveRoleKey(
   role: UserRole,
   department?: string | null,
 ): string {
-  if (role === "marketer" && department) return `marketer_${department}`;
+  if (role === "marketer") {
+    const marketerDepartment =
+      department === "immigration" || department === "placement"
+        ? department
+        : "accounts";
+    return `marketer_${marketerDepartment}`;
+  }
   return role;
 }
 

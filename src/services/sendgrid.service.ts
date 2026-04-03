@@ -1,5 +1,5 @@
-import sgMail from '@sendgrid/mail';
-import { env } from '../config/env';
+import sgMail from "@sendgrid/mail";
+import { env } from "../config/env";
 
 if (env.SENDGRID_API_KEY) {
   sgMail.setApiKey(env.SENDGRID_API_KEY);
@@ -11,14 +11,22 @@ export async function sendPokeEmail(params: {
   fromName: string;
   fromEmail: string;
   subjectContext: string;
-  emailBody?: string;       // custom body from Mail Template modal
-  pdfAttachment?: string;   // base64-encoded PDF (candidate resume attachment)
+  emailBody?: string; // custom body from Mail Template modal
+  pdfAttachment?: string; // base64-encoded PDF (candidate resume attachment)
   pdfFilename?: string;
 }): Promise<void> {
   if (!env.SENDGRID_API_KEY) {
-    console.log(`[SendGrid] (dev) Poke email to ${params.to} from ${params.fromName} about "${params.subjectContext}"`);
-    if (params.emailBody) console.log(`[SendGrid] Custom body preview:\n${params.emailBody.slice(0, 200)}...`);
-    if (params.pdfAttachment) console.log(`[SendGrid] PDF attachment included (${Math.round(params.pdfAttachment.length * 0.75 / 1024)}KB)`);
+    console.log(
+      `[SendGrid] (dev) Poke email to ${params.to} from ${params.fromName} about "${params.subjectContext}"`,
+    );
+    if (params.emailBody)
+      console.log(
+        `[SendGrid] Custom body preview:\n${params.emailBody.slice(0, 200)}...`,
+      );
+    if (params.pdfAttachment)
+      console.log(
+        `[SendGrid] PDF attachment included (${Math.round((params.pdfAttachment.length * 0.75) / 1024)}KB)`,
+      );
     return;
   }
 
@@ -28,9 +36,9 @@ export async function sendPokeEmail(params: {
           <h1 style="color: #fff; margin: 0; font-size: 28px;">Match<span style="color: #a8cbf5;">DB</span></h1>
         </div>
         <div style="padding: 32px 24px; background: #ffffff;">
-          <pre style="font-family: Arial, sans-serif; white-space: pre-wrap; line-height: 1.7; color: #333; font-size: 14px; margin: 0;">${params.emailBody.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+          <pre style="font-family: Arial, sans-serif; white-space: pre-wrap; line-height: 1.7; color: #333; font-size: 14px; margin: 0;">${params.emailBody.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
           <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 24px 0;" />
-          <p style="color: #888; font-size: 12px;">Sent via <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}" style="color: #3b6fa6;">MatchDB</a> &mdash; <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/settings" style="color: #3b6fa6;">Manage notifications</a></p>
+          <p style="color: #888; font-size: 12px;">Sent via <a href="${process.env.CLIENT_URL || "http://localhost:3000"}" style="color: #3b6fa6;">MatchDB</a> &mdash; <a href="${process.env.CLIENT_URL || "http://localhost:3000"}/settings" style="color: #3b6fa6;">Manage notifications</a></p>
         </div>
       </div>`
     : `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -45,9 +53,9 @@ export async function sendPokeEmail(params: {
             <p style="margin: 0; color: #333;">Reply to this email or log in to MatchDB to respond.</p>
           </div>
           <div style="text-align: center; margin: 32px 0;">
-            <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}" style="background: #3b6fa6; color: #fff; padding: 12px 32px; text-decoration: none; border-radius: 4px; font-weight: bold;">View on MatchDB</a>
+            <a href="${process.env.CLIENT_URL || "http://localhost:3000"}" style="background: #3b6fa6; color: #fff; padding: 12px 32px; text-decoration: none; border-radius: 4px; font-weight: bold;">View on MatchDB</a>
           </div>
-          <p style="color: #888; font-size: 12px;">You received this because your profile is visible on MatchDB. <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/settings" style="color: #3b6fa6;">Manage notifications</a></p>
+          <p style="color: #888; font-size: 12px;">You received this because your profile is visible on MatchDB. <a href="${process.env.CLIENT_URL || "http://localhost:3000"}/settings" style="color: #3b6fa6;">Manage notifications</a></p>
         </div>
       </div>`;
 
@@ -59,16 +67,19 @@ export async function sendPokeEmail(params: {
       ? params.subjectContext
       : `${params.fromName} is interested in connecting — ${params.subjectContext}`,
     html: htmlContent,
+    ...(params.pdfAttachment
+      ? {
+          attachments: [
+            {
+              content: params.pdfAttachment,
+              filename: params.pdfFilename || "resume.pdf",
+              type: "application/pdf",
+              disposition: "attachment" as const,
+            },
+          ],
+        }
+      : {}),
   };
-
-  if (params.pdfAttachment) {
-    (msg as any).attachments = [{
-      content: params.pdfAttachment,
-      filename: params.pdfFilename || 'resume.pdf',
-      type: 'application/pdf',
-      disposition: 'attachment',
-    }];
-  }
 
   await sgMail.send(msg);
 }
@@ -80,19 +91,26 @@ export async function sendInterviewInviteEmail(params: {
   fromEmail: string;
   jobTitle: string;
   meetLink: string;
-  proposedAt?: string;   // ISO string
+  proposedAt?: string; // ISO string
   message?: string;
 }): Promise<void> {
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
   const proposedTime = params.proposedAt
-    ? new Date(params.proposedAt).toLocaleString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+    ? new Date(params.proposedAt).toLocaleString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
       })
-    : 'To be confirmed';
+    : "To be confirmed";
 
   if (!env.SENDGRID_API_KEY) {
-    console.log(`[SendGrid] (dev) Interview invite to ${params.to} from ${params.fromName} for "${params.jobTitle}" — Meet: ${params.meetLink}`);
+    console.log(
+      `[SendGrid] (dev) Interview invite to ${params.to} from ${params.fromName} for "${params.jobTitle}" — Meet: ${params.meetLink}`,
+    );
     return;
   }
 
@@ -107,9 +125,13 @@ export async function sendInterviewInviteEmail(params: {
         <strong>${params.fromName}</strong> has invited you to a screening call for the position of
         <strong>${params.jobTitle}</strong>.
       </p>
-      ${params.message ? `<div style="background: #f0f4f8; border-left: 4px solid #3b6fa6; padding: 16px; margin: 16px 0;">
-        <p style="margin: 0; color: #333; white-space: pre-wrap;">${params.message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
-      </div>` : ''}
+      ${
+        params.message
+          ? `<div style="background: #f0f4f8; border-left: 4px solid #3b6fa6; padding: 16px; margin: 16px 0;">
+        <p style="margin: 0; color: #333; white-space: pre-wrap;">${params.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+      </div>`
+          : ""
+      }
       <table style="width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 14px;">
         <tr>
           <td style="padding: 10px 12px; background: #f5f7fa; border: 1px solid #e0e0e0; font-weight: 700; width: 35%;">Proposed Time</td>

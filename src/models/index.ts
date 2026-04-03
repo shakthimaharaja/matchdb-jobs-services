@@ -4,7 +4,10 @@ export { Application } from "./Application";
 export { PokeRecord } from "./PokeRecord";
 export { PokeLog } from "./PokeLog";
 export { Company } from "./Company";
-export { EmployerCandidate } from "./EmployerCandidate";
+export {
+  EmployerCandidate,
+  EmployerCandidate as MarketerCandidate,
+} from "./EmployerCandidate";
 export { ForwardedOpening } from "./ForwardedOpening";
 export { CompanyInvite } from "./CompanyInvite";
 export { ProjectFinancial } from "./ProjectFinancial";

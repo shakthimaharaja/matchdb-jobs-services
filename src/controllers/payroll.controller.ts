@@ -15,7 +15,7 @@ export async function listPayPeriods(
   try {
     const { companyId } = req.companyUser!;
     const { status, page = "1", limit = "20" } = req.query;
-    const filter: any = { companyId };
+    const filter: Record<string, unknown> = { companyId };
     if (status) filter.status = status;
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -111,9 +111,7 @@ export async function updatePayPeriod(
       return;
     }
     if (period.status !== "DRAFT") {
-      res
-        .status(400)
-        .json({ error: "Only DRAFT pay periods can be edited" });
+      res.status(400).json({ error: "Only DRAFT pay periods can be edited" });
       return;
     }
 
@@ -326,9 +324,7 @@ export async function voidPayPeriod(
       return;
     }
     if (period.status === "PROCESSED") {
-      res
-        .status(400)
-        .json({ error: "Processed pay periods cannot be voided" });
+      res.status(400).json({ error: "Processed pay periods cannot be voided" });
       return;
     }
 

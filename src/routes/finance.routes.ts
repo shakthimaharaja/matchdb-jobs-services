@@ -13,10 +13,22 @@ const router = Router();
 
 // ═══ QUICKBOOKS — FINANCIAL REPORTS & DASHBOARD ═══
 
-router.get("/dashboard", requirePermission("financial_reports"), getFinanceDashboard);
-router.get("/profit-loss", requirePermission("financial_reports"), getProfitLoss);
+router.get(
+  "/dashboard",
+  requirePermission("financial_reports"),
+  getFinanceDashboard,
+);
+router.get(
+  "/profit-loss",
+  requirePermission("financial_reports"),
+  getProfitLoss,
+);
 router.get("/cash-flow", requirePermission("cash_flow"), getCashFlow);
-router.get("/margin-report", requirePermission("margin_tracking"), getMarginReport);
+router.get(
+  "/margin-report",
+  requirePermission("margin_tracking"),
+  getMarginReport,
+);
 router.get(
   "/expense-categories",
   requirePermission("financial_reports"),
