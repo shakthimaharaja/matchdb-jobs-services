@@ -203,7 +203,7 @@ export async function sendInvoice(
     invoice.sentAt = new Date();
     await invoice.save();
 
-    // TODO: Email integration — send invoice PDF to client billing email
+    // FUTURE: Email integration — send invoice PDF to client billing email
 
     res.json(invoice);
   } catch (err) {

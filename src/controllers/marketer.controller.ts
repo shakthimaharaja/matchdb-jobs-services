@@ -54,6 +54,17 @@ export async function getMarketerStats(
 }
 
 /**
+ * Build $or search clauses for job searching by title, skills, or location.
+ */
+async function buildJobSearchClauses(rx: RegExp, search: string) {
+  return [
+    { title: { $regex: rx } },
+    { location: { $regex: rx } },
+    { skillsRequired: search },
+  ];
+}
+
+/**
  * GET /api/jobs/marketer/jobs
  * Returns paginated, searchable list of all active vendor job postings.
  *
@@ -82,29 +93,9 @@ export async function getMarketerJobs(
 
     const where: Record<string, unknown> = { isActive: true };
     if (search) {
-      const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
       const rx = new RegExp(escaped, "i");
-
-      // Find matching client/vendor company IDs so we can search jobs by company
-      const [matchingClients, matchingVendors] = await Promise.all([
-        ClientCompany.find({ name: { $regex: rx } })
-          .select("_id")
-          .lean(),
-        VendorCompany.find({ name: { $regex: rx } })
-          .select("_id")
-          .lean(),
-      ]);
-      const ccIds = matchingClients.map((c) => c._id);
-      const vcIds = matchingVendors.map((v) => v._id);
-
-      const orClauses: Record<string, unknown>[] = [
-        { title: { $regex: rx } },
-        { location: { $regex: rx } },
-        { skillsRequired: search },
-      ];
-      if (ccIds.length) orClauses.push({ clientCompanyId: { $in: ccIds } });
-      if (vcIds.length) orClauses.push({ vendorCompanyId: { $in: vcIds } });
-      where.$or = orClauses;
+      where.$or = await buildJobSearchClauses(rx, search);
     }
 
     // Build client/vendor company name lookup maps
@@ -214,7 +205,7 @@ export async function getMarketerProfiles(
 
     const where: Record<string, unknown> = {};
     if (search) {
-      const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escaped = search.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
       const rx = new RegExp(escaped, "i");
       where.$or = [
         { name: { $regex: rx } },
@@ -318,15 +309,13 @@ export async function registerCompany(
       ? await Company.findById(cu.companyId).lean()
       : await Company.findOne({ adminUserId: userId }).lean();
 
-    if (!company) {
-      company = (
-        await Company.create({
-          name: trimmedName,
-          adminUserId: userId,
-          adminEmail: userEmail,
-        })
-      ).toObject();
-    }
+    company ??= (
+      await Company.create({
+        name: trimmedName,
+        adminUserId: userId,
+        adminEmail: userEmail,
+      })
+    ).toObject();
 
     res.json({
       id: company._id,
@@ -547,6 +536,112 @@ export async function getMarketerCandidates(
   }
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Process all applications and aggregate per-candidate financial totals,
+ * projects array, and domain distribution counts.
+ */
+function aggregateApplicationData(
+  applications: any[],
+  cidToEmail: Record<string, string>,
+  roster: any[],
+  profileByEmail: Record<string, any>,
+  finByAppId: Map<string, any>,
+  jobMap: Map<string, any>,
+) {
+  const candFinTotals: Record<
+    string,
+    {
+      totalBilled: number;
+      totalPay: number;
+      netPayable: number;
+      amountPaid: number;
+      amountPending: number;
+      hoursWorked: number;
+      projectCount: number;
+      activeProjects: number;
+    }
+  > = {};
+  const domainMap: Record<string, number> = {};
+  const projectsOut: Record<string, unknown>[] = [];
+
+  for (const a of applications) {
+    const email = cidToEmail[a.candidateId] ?? "";
+    const rosterEntry = roster.find(
+      (r: any) => r.candidateEmail.toLowerCase() === email,
+    );
+    const prof = profileByEmail[email];
+    const fin = finByAppId.get(a._id);
+    const aJob = jobMap.get(a.jobId);
+
+    if (!candFinTotals[email]) {
+      candFinTotals[email] = {
+        totalBilled: 0,
+        totalPay: 0,
+        netPayable: 0,
+        amountPaid: 0,
+        amountPending: 0,
+        hoursWorked: 0,
+        projectCount: 0,
+        activeProjects: 0,
+      };
+    }
+    const ct = candFinTotals[email];
+    ct.projectCount++;
+    if (aJob?.isActive) ct.activeProjects++;
+    if (fin) {
+      ct.totalBilled += toNum(fin.totalBilled);
+      ct.totalPay += toNum(fin.totalPay);
+      ct.netPayable += toNum(fin.netPayable);
+      ct.amountPaid += toNum(fin.amountPaid);
+      ct.amountPending += toNum(fin.amountPending);
+      ct.hoursWorked += toNum(fin.hoursWorked);
+    }
+
+    const domain = prof?.currentRole || aJob?.title || "Unknown";
+    domainMap[domain] = (domainMap[domain] || 0) + 1;
+
+    projectsOut.push({
+      applicationId: a._id,
+      candidateId: rosterEntry?._id ?? "",
+      candidateName: rosterEntry?.candidateName ?? prof?.name ?? "",
+      candidateEmail: email,
+      jobTitle: aJob?.title ?? a.jobTitle,
+      vendorEmail: aJob?.vendorEmail ?? "",
+      vendorCompanyName: fin?.vendorCompanyName ?? "",
+      vendorCompanyId: fin?.vendorCompanyId ?? "",
+      clientName: fin?.clientName ?? "",
+      clientCompanyId: fin?.clientCompanyId ?? aJob?.clientCompanyId ?? "",
+      implementationPartner: fin?.implementationPartner ?? "",
+      pocName: fin?.pocName ?? "",
+      pocEmail: fin?.pocEmail ?? "",
+      location: aJob?.location ?? "",
+      jobType: aJob?.jobType ?? "",
+      jobSubType: aJob?.jobSubType ?? "",
+      isActive: aJob?.isActive ?? false,
+      appliedAt: a.createdAt?.toISOString() ?? "",
+      financials: fin
+        ? {
+            billRate: toNum(fin.billRate),
+            payRate: toNum(fin.payRate),
+            hoursWorked: toNum(fin.hoursWorked),
+            projectStart: fin.projectStart?.toISOString() ?? null,
+            projectEnd: fin.projectEnd?.toISOString() ?? null,
+            stateCode: fin.stateCode,
+            totalBilled: toNum(fin.totalBilled),
+            totalPay: toNum(fin.totalPay),
+            netPayable: toNum(fin.netPayable),
+            amountPaid: toNum(fin.amountPaid),
+            amountPending: toNum(fin.amountPending),
+          }
+        : null,
+    });
+  }
+
+  return { candFinTotals, projectsOut, domainMap };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 /**
  * GET /api/jobs/marketer/company-summary
  * Returns company-wide aggregated data for all candidates:
@@ -632,100 +727,16 @@ export async function getCompanySummary(
     const cidToEmail: Record<string, string> = {};
     for (const p of profiles) cidToEmail[p.candidateId] = p.email.toLowerCase();
 
-    // 5. Build per-candidate financial totals
-    const candFinTotals: Record<
-      string,
-      {
-        totalBilled: number;
-        totalPay: number;
-        netPayable: number;
-        amountPaid: number;
-        amountPending: number;
-        hoursWorked: number;
-        projectCount: number;
-        activeProjects: number;
-      }
-    > = {};
-
-    // 6. Build projects array & domain counts
-    const domainMap: Record<string, number> = {};
-    const projectsOut: Record<string, unknown>[] = [];
-
-    for (const a of applications) {
-      const email = cidToEmail[a.candidateId] ?? "";
-      const rosterEntry = roster.find(
-        (r) => r.candidateEmail.toLowerCase() === email,
+    // 5. Build per-candidate financial totals, projects, and domain counts
+    const { candFinTotals, projectsOut, domainMap } =
+      aggregateApplicationData(
+        applications,
+        cidToEmail,
+        roster,
+        profileByEmail,
+        finByAppId,
+        jobMap,
       );
-      const prof = profileByEmail[email];
-      const fin = finByAppId.get(a._id);
-      const aJob = jobMap.get(a.jobId);
-
-      // Aggregate per-candidate
-      if (!candFinTotals[email]) {
-        candFinTotals[email] = {
-          totalBilled: 0,
-          totalPay: 0,
-          netPayable: 0,
-          amountPaid: 0,
-          amountPending: 0,
-          hoursWorked: 0,
-          projectCount: 0,
-          activeProjects: 0,
-        };
-      }
-      const ct = candFinTotals[email];
-      ct.projectCount++;
-      if (aJob?.isActive) ct.activeProjects++;
-      if (fin) {
-        ct.totalBilled += toNum(fin.totalBilled);
-        ct.totalPay += toNum(fin.totalPay);
-        ct.netPayable += toNum(fin.netPayable);
-        ct.amountPaid += toNum(fin.amountPaid);
-        ct.amountPending += toNum(fin.amountPending);
-        ct.hoursWorked += toNum(fin.hoursWorked);
-      }
-
-      // Domain count — use job title or role
-      const domain = prof?.currentRole || aJob?.title || "Unknown";
-      domainMap[domain] = (domainMap[domain] || 0) + 1;
-
-      // Project row
-      projectsOut.push({
-        applicationId: a._id,
-        candidateId: rosterEntry?._id ?? "",
-        candidateName: rosterEntry?.candidateName ?? prof?.name ?? "",
-        candidateEmail: email,
-        jobTitle: aJob?.title ?? a.jobTitle,
-        vendorEmail: aJob?.vendorEmail ?? "",
-        vendorCompanyName: fin?.vendorCompanyName ?? "",
-        vendorCompanyId: fin?.vendorCompanyId ?? "",
-        clientName: fin?.clientName ?? "",
-        clientCompanyId: fin?.clientCompanyId ?? aJob?.clientCompanyId ?? "",
-        implementationPartner: fin?.implementationPartner ?? "",
-        pocName: fin?.pocName ?? "",
-        pocEmail: fin?.pocEmail ?? "",
-        location: aJob?.location ?? "",
-        jobType: aJob?.jobType ?? "",
-        jobSubType: aJob?.jobSubType ?? "",
-        isActive: aJob?.isActive ?? false,
-        appliedAt: a.createdAt?.toISOString() ?? "",
-        financials: fin
-          ? {
-              billRate: toNum(fin.billRate),
-              payRate: toNum(fin.payRate),
-              hoursWorked: toNum(fin.hoursWorked),
-              projectStart: fin.projectStart?.toISOString() ?? null,
-              projectEnd: fin.projectEnd?.toISOString() ?? null,
-              stateCode: fin.stateCode,
-              totalBilled: toNum(fin.totalBilled),
-              totalPay: toNum(fin.totalPay),
-              netPayable: toNum(fin.netPayable),
-              amountPaid: toNum(fin.amountPaid),
-              amountPending: toNum(fin.amountPending),
-            }
-          : null,
-      });
-    }
 
     // 7. Build candidates array
     const candidatesOut = roster.map((r) => {
@@ -1392,7 +1403,7 @@ export async function acceptInvite(
     // If candidate has a profile, link it to the company
     if (req.user?.userId) {
       await CandidateProfile.updateMany(
-        { candidateId: req.user!.userId },
+        { candidateId: req.user?.userId },
         {
           $set: {
             companyId: invite.companyId,
@@ -1430,7 +1441,7 @@ export async function searchCompanies(
       return;
     }
 
-    const escaped = q.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = q.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
     const rx = new RegExp(escaped, "i");
     const docs = await Company.find({ name: { $regex: rx } })
       .select("_id name")

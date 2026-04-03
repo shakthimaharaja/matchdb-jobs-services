@@ -134,6 +134,45 @@ export async function listPublicProfiles(
   }
 }
 
+/** Safely coerce an unknown value to string (avoids '[object Object]'). */
+function asStr(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+/**
+ * Validates salary-related fields and sends 400 if invalid.
+ * Returns true if validation failed (response already sent), false if OK.
+ */
+function validateSalaryFields(
+  body: { salaryMin?: number; salaryMax?: number; payPerHour?: number },
+  res: Response,
+): boolean {
+  if (body.salaryMin !== undefined && body.salaryMin < 0) {
+    res.status(400).json({ error: "salaryMin must be non-negative" });
+    return true;
+  }
+  if (body.salaryMax !== undefined && body.salaryMax < 0) {
+    res.status(400).json({ error: "salaryMax must be non-negative" });
+    return true;
+  }
+  if (
+    body.salaryMin !== undefined &&
+    body.salaryMax !== undefined &&
+    body.salaryMin > body.salaryMax
+  ) {
+    res.status(400).json({ error: "salaryMin must not exceed salaryMax" });
+    return true;
+  }
+  if (
+    body.payPerHour !== undefined &&
+    (body.payPerHour < 0 || body.payPerHour > 10000)
+  ) {
+    res.status(400).json({ error: "payPerHour must be between 0 and 10000" });
+    return true;
+  }
+  return false;
+}
+
 // POST /api/jobs/create � vendor creates job
 export async function createJob(
   req: Request,
@@ -166,30 +205,7 @@ export async function createJob(
 
     const body = schema.parse(incoming);
 
-    // -- Salary field validation --------------------------------------------
-    if (body.salaryMin !== undefined && body.salaryMin < 0) {
-      res.status(400).json({ error: "salaryMin must be non-negative" });
-      return;
-    }
-    if (body.salaryMax !== undefined && body.salaryMax < 0) {
-      res.status(400).json({ error: "salaryMax must be non-negative" });
-      return;
-    }
-    if (
-      body.salaryMin !== undefined &&
-      body.salaryMax !== undefined &&
-      body.salaryMin > body.salaryMax
-    ) {
-      res.status(400).json({ error: "salaryMin must not exceed salaryMax" });
-      return;
-    }
-    if (
-      body.payPerHour !== undefined &&
-      (body.payPerHour < 0 || body.payPerHour > 10000)
-    ) {
-      res.status(400).json({ error: "payPerHour must be between 0 and 10000" });
-      return;
-    }
+    if (validateSalaryFields(body, res)) return;
 
     // -- Job posting limit enforcement --------------------------------------
     const plan = req.user!.plan || "free";
@@ -574,12 +590,12 @@ function buildLockedUpdateData(
   const mergedVis = existing.visibilityConfig || {};
 
   const fullResumeText = [
-    incoming.resumeSummary || existing.resumeSummary || "",
-    incoming.resumeExperience || existing.resumeExperience || "",
-    incoming.resumeEducation || existing.resumeEducation || "",
-    incoming.resumeAchievements || existing.resumeAchievements || "",
-    incoming.bio || existing.bio || "",
-    existing.currentRole || "",
+    asStr(incoming.resumeSummary) || asStr(existing.resumeSummary),
+    asStr(incoming.resumeExperience) || asStr(existing.resumeExperience),
+    asStr(incoming.resumeEducation) || asStr(existing.resumeEducation),
+    asStr(incoming.resumeAchievements) || asStr(existing.resumeAchievements),
+    asStr(incoming.bio) || asStr(existing.bio),
+    asStr(existing.currentRole),
   ].join(" ");
   const mergedSkills = Array.from(
     new Set([
@@ -612,12 +628,12 @@ function buildNewProfileData(
   incoming: Record<string, unknown>,
 ): Record<string, unknown> {
   const resumeText = [
-    incoming.resumeSummary || "",
-    incoming.resumeExperience || "",
-    incoming.resumeEducation || "",
-    incoming.resumeAchievements || "",
-    incoming.bio || "",
-    incoming.currentRole || "",
+    asStr(incoming.resumeSummary),
+    asStr(incoming.resumeExperience),
+    asStr(incoming.resumeEducation),
+    asStr(incoming.resumeAchievements),
+    asStr(incoming.bio),
+    asStr(incoming.currentRole),
   ].join(" ");
   return {
     ...incoming,
