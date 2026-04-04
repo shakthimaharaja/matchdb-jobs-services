@@ -92,7 +92,7 @@ src/
 
 - Config loaded from `env/.env.local` (dev)
 - `JWT_SECRET` must match with shell-services
-- MongoDB Atlas — database name: `matchdb-jobs`
+- MongoDB Atlas — database name: `matchingdb-jobs`
 
 ### Swagger
 

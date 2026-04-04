@@ -47,7 +47,7 @@ The server starts on **http://localhost:8001**.
 
 ### Seed Data
 
-`npm run seed` populates the `matchdb-jobs` database with:
+`npm run seed` populates the `matchingdb-jobs` database with:
 
 - **20 jobs** — across 3 vendors (w2, 1099, c2c; salary, hourly, contract; various locations)
 - **10 candidate profiles** — full resumes with skills and experience
@@ -270,7 +270,7 @@ matchdb-jobs-services/
 
 ## Database (MongoDB Atlas)
 
-This service connects to the `matchdb-jobs` database on MongoDB Atlas.
+This service connects to the `matchingdb-jobs` database on MongoDB Atlas.
 Schemas are defined as Mongoose models — no migrations needed.
 
 ### Collections (20 models)

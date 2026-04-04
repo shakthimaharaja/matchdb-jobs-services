@@ -102,7 +102,7 @@ function fin(
 /* ================================================================== */
 async function seedBulk() {
   await connectMongo();
-  console.log("ðŸŒ± Bulk-seeding matchdb-jobs database...\n");
+  console.log("ðŸŒ± Bulk-seeding matchingdb-jobs database...\n");
 
   /* look up existing company for admin marketer */
   const company = await Company.findOne({ adminUserId: ADMIN_MARKETER }).lean();

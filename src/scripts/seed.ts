@@ -98,7 +98,7 @@ const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000);
 /* ================================================================== */
 async function seed() {
   await connectMongo();
-  console.log("ðŸŒ± Seeding matchdb-jobs database...\n");
+  console.log("ðŸŒ± Seeding matchingdb-jobs database...\n");
 
   const db = mongoose.connection.db!;
   const existing = new Set(
