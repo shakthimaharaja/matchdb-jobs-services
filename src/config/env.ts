@@ -17,8 +17,9 @@ export const env = {
   MONGO_URI: required("MONGO_URI"),
   JWT_SECRET: required("JWT_SECRET"),
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || "",
-  SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL || "noreply@matchdb.io",
-  SENDGRID_FROM_NAME: process.env.SENDGRID_FROM_NAME || "MatchDB",
+  SENDGRID_FROM_EMAIL:
+    process.env.SENDGRID_FROM_EMAIL || "noreply@matchingdb.io",
+  SENDGRID_FROM_NAME: process.env.SENDGRID_FROM_NAME || "MatchingDB",
   CORS_ORIGINS: (
     process.env.CORS_ORIGINS ||
     "http://localhost:3000,http://localhost:3001,http://localhost:4000,http://localhost:4001"
@@ -28,5 +29,6 @@ export const env = {
   // System "vendor" identity used for collection-uploaded job postings
   SYSTEM_VENDOR_ID:
     process.env.SYSTEM_VENDOR_ID || "00000000-0000-0000-0000-000000000001",
-  SYSTEM_VENDOR_EMAIL: process.env.SYSTEM_VENDOR_EMAIL || "system@matchdb.io",
+  SYSTEM_VENDOR_EMAIL:
+    process.env.SYSTEM_VENDOR_EMAIL || "system@matchingdb.io",
 };

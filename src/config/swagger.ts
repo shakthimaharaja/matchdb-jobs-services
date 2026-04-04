@@ -4,11 +4,11 @@ const options: swaggerJsdoc.Options = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "MatchDB Jobs Services API",
+      title: "MatchingDB Jobs Services API",
       version: "1.0.0",
       description:
-        "Jobs, Candidate Profiles, Applications, Matching, Employer RBAC & Company Admin API for the MatchDB platform. Handles job postings, candidate profiles, skill-based matching, resume generation, employer operations, company user management, and candidate interactions.",
-      contact: { name: "MatchDB Team" },
+        "Jobs, Candidate Profiles, Applications, Matching, Employer RBAC & Company Admin API for the MatchingDB platform. Handles job postings, candidate profiles, skill-based matching, resume generation, employer operations, company user management, and candidate interactions.",
+      contact: { name: "MatchingDB Team" },
     },
     servers: [
       { url: "/api/jobs", description: "Default (relative)" },

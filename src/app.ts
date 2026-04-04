@@ -148,7 +148,7 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec, {
     customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "MatchDB Jobs Services — API Docs",
+    customSiteTitle: "MatchingDB Jobs Services — API Docs",
   }),
 );
 

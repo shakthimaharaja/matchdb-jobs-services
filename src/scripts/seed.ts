@@ -3050,7 +3050,7 @@ async function seed() {
       targetEmail: "alice.johnson@test.com",
       targetName: "Alice Johnson",
       subject: "Cloud Infrastructure Engineer - remote opportunity",
-      isEmail: false,
+      isEmail: true,
       jobId: J[33],
       jobTitle: "Senior Cloud Infrastructure Engineer",
     },

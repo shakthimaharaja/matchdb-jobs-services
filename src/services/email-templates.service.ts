@@ -24,7 +24,7 @@ function wrapEmail(content: string): string {
   return `
     <div style="${WRAPPER}">
       <div style="${HEADER}">
-        <h1 style="${LOGO}">Match<span style="color: #a8cbf5;">DB</span></h1>
+        <h1 style="${LOGO}">Matching<span style="color: #a8cbf5;">DB</span></h1>
       </div>
       <div style="${BODY}">
         ${content}
@@ -70,7 +70,7 @@ export async function sendEmployeeInviteEmail(
     </p>
     <p style="color: #444; line-height: 1.6;">
       <strong>${p.adminName}</strong> from <strong>${p.companyName}</strong> has invited you to join
-      MatchDB as a team member with the <strong>${p.role}</strong> role.
+      MatchingDB as a team member with the <strong>${p.role}</strong> role.
     </p>
     <div style="text-align: center; margin: 32px 0;">
       <a href="${p.registerUrl}" style="${CTA}">Accept Invitation</a>
@@ -83,7 +83,7 @@ export async function sendEmployeeInviteEmail(
     </p>
   `);
 
-  await send(p.to, `${p.companyName} — You're invited to MatchDB`, html);
+  await send(p.to, `${p.companyName} — You're invited to MatchingDB`, html);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -116,7 +116,7 @@ export async function sendCandidateInviteEmail(
     </p>
     <p style="color: #444; line-height: 1.6;">
       <strong>${p.companyName}</strong> has invited you to join
-      <strong>MatchDB</strong> as a candidate.
+      <strong>MatchingDB</strong> as a candidate.
     </p>
     ${noteBlock}
     <div style="background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; margin: 20px 0; font-size: 13px;">
@@ -137,7 +137,11 @@ export async function sendCandidateInviteEmail(
     </p>
   `);
 
-  await send(p.to, `${p.companyName} — Candidate Invitation to MatchDB`, html);
+  await send(
+    p.to,
+    `${p.companyName} — Candidate Invitation to MatchingDB`,
+    html,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -156,13 +160,13 @@ export async function sendCandidateWelcomeEmail(
   p: CandidateWelcomeEmailParams,
 ): Promise<void> {
   const html = wrapEmail(`
-    <h2 style="color: #2e7d32; margin-top: 0;">🎉 Welcome to MatchDB!</h2>
+    <h2 style="color: #2e7d32; margin-top: 0;">🎉 Welcome to MatchingDB!</h2>
     <p style="color: #444; line-height: 1.6;">
       Hi ${p.candidateName},
     </p>
     <p style="color: #444; line-height: 1.6;">
       Your payment has been received and your account is now <strong>active</strong>.
-      You're all set to start using MatchDB under <strong>${p.companyName}</strong>.
+      You're all set to start using MatchingDB under <strong>${p.companyName}</strong>.
     </p>
     <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0; font-size: 13px;">
       <strong>Plan:</strong> ${p.planName}<br/>
@@ -177,7 +181,7 @@ export async function sendCandidateWelcomeEmail(
     </p>
   `);
 
-  await send(p.to, "Welcome to MatchDB — Your Account is Active!", html);
+  await send(p.to, "Welcome to MatchingDB — Your Account is Active!", html);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -212,5 +216,5 @@ export async function sendCandidatePaymentFailedEmail(
     </p>
   `);
 
-  await send(p.to, "MatchDB — Payment Failed", html);
+  await send(p.to, "MatchingDB — Payment Failed", html);
 }

@@ -1,8 +1,8 @@
-# MatchDB Jobs Services — Copilot Rules
+# MatchingDB Jobs Services — Copilot Rules
 
 ## Project Overview
 
-This is the **Jobs, Matching, Marketer & Financials API** for the MatchDB staffing platform. It runs on **port 8001** and handles job postings, candidate profiles, skill-based matching, marketer company management, project financials, timesheets, and interviews.
+This is the **Jobs, Matching, Marketer & Financials API** for the MatchingDB staffing platform. It runs on **port 8001** and handles job postings, candidate profiles, skill-based matching, marketer company management, project financials, timesheets, and interviews.
 
 **Stack:** Node.js, Express, TypeScript, Mongoose 8, MongoDB Atlas, SendGrid, WebSocket, SSE
 
@@ -22,7 +22,7 @@ This is the **Jobs, Matching, Marketer & Financials API** for the MatchDB staffi
 Use VS Code tasks (`Ctrl+Shift+B`) or the PowerShell script:
 
 ```powershell
-# From the MatchDB workspace root:
+# From the MatchingDB workspace root:
 .\start-matchdb.ps1
 ```
 
@@ -31,7 +31,7 @@ Use VS Code tasks (`Ctrl+Shift+B`) or the PowerShell script:
 Always use the shared push script from the workspace root:
 
 ```powershell
-# From the MatchDB workspace root:
+# From the MatchingDB workspace root:
 .\push-all.ps1
 ```
 

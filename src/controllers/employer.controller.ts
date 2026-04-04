@@ -1248,10 +1248,10 @@ export async function inviteCandidate(
     await sendPokeEmail({
       to: mc.candidateEmail,
       toName: mc.candidateName || mc.candidateEmail,
-      fromName: `${company.name} (via MatchDB)`,
+      fromName: `${company.name} (via MatchingDB)`,
       fromEmail: req.user!.email,
-      subjectContext: `You're invited to join ${company.name} on MatchDB`,
-      emailBody: `Hi ${mc.candidateName || "there"},\n\n${company.name} has invited you to join their team on MatchDB.\n\n${noteBlock}Click the link below to accept and create your profile:\n${inviteLink}\n\nThis invite expires in 14 days.\n\nBest regards,\nThe MatchDB Team`,
+      subjectContext: `You're invited to join ${company.name} on MatchingDB`,
+      emailBody: `Hi ${mc.candidateName || "there"},\n\n${company.name} has invited you to join their team on MatchingDB.\n\n${noteBlock}Click the link below to accept and create your profile:\n${inviteLink}\n\nThis invite expires in 14 days.\n\nBest regards,\nThe MatchingDB Team`,
     }).catch((err) => console.error("[Invite Email] Send failed:", err));
 
     res.json({
@@ -1529,10 +1529,10 @@ export async function forwardOpeningWithEmail(
       await sendPokeEmail({
         to: candidateEmail.trim().toLowerCase(),
         toName: mc.candidateName || candidateEmail,
-        fromName: `${company.name} (via MatchDB)`,
+        fromName: `${company.name} (via MatchingDB)`,
         fromEmail: req.user!.email,
         subjectContext: `Job Opening: ${job.title} Ã¯Â¿Â½ ${job.location || "Remote"}`,
-        emailBody: `Hi ${mc.candidateName || "there"},\n\nYour recruiter at ${company.name} has shared a job opening with you:\n\nTitle: ${job.title}\nLocation: ${job.location || "Remote"}\nType: ${job.jobType}${subTypeSuffix}\nCompensation: ${comp}\nSkills: ${skillsList}\n\n${recruiterNote}Log in to MatchDB to view details and apply.\n\nBest regards,\nThe MatchDB Team`,
+        emailBody: `Hi ${mc.candidateName || "there"},\n\nYour recruiter at ${company.name} has shared a job opening with you:\n\nTitle: ${job.title}\nLocation: ${job.location || "Remote"}\nType: ${job.jobType}${subTypeSuffix}\nCompensation: ${comp}\nSkills: ${skillsList}\n\n${recruiterNote}Log in to MatchingDB to view details and apply.\n\nBest regards,\nThe MatchingDB Team`,
       }).catch((err) => console.error("[Forward Email] Send failed:", err));
 
       res.status(201).json({

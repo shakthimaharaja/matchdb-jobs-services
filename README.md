@@ -1,6 +1,6 @@
 # matchdb-jobs-services
 
-Jobs, Candidate Profiles, Applications, Matching, Pokes, Employer RBAC & Company Admin backend for the MatchDB staffing platform. Uses **MongoDB Atlas** via Mongoose.
+Jobs, Candidate Profiles, Applications, Matching, Pokes, Employer RBAC & Company Admin backend for the MatchingDB staffing platform. Uses **MongoDB Atlas** via Mongoose.
 
 ---
 
@@ -306,7 +306,7 @@ Config is loaded from `env/.env.{NODE_ENV}` files:
 ```env
 PORT=8001
 NODE_ENV=local
-MONGO_URI=mongodb+srv://...@matchdb.rhutf6s.mongodb.net/matchdb-jobs?retryWrites=true&w=majority
+MONGO_URI=mongodb+srv://...@matchingdb.mrumkpb.mongodb.net/matchdb-jobs?retryWrites=true&w=majority
 JWT_SECRET=dev-jwt-secret-change-in-production-min-32-chars
 SENDGRID_API_KEY=
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001
